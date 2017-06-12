@@ -43,14 +43,14 @@ import scala.concurrent.duration._
   */
 object SequenceHandlerStreamRunner {
   def apply[A <: Model, B <: DeltaType](
-      seqHandler: SequenceHandler[A, B],
-      func: PartialFunction[Any, Task[(Int, List[DeltaModel2[A, B]], Int)]])(
+      seqHandler: SequenceHandler[A, B])(
       implicit as: ActorSystem,
+      func: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
       cv: CSVConverter[A]) = {
 
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
-      Props.create(classOf[SinkActor[A, B]], seqHandler, func, taskSupervisor))
+      Props.create(classOf[SinkActor[A, B]], seqHandler, func, taskSupervisor, seqHandler.monoid))
     val stream = new StreamRunner[A, B](sinkStream)
   }
 }
@@ -58,7 +58,8 @@ object SequenceHandlerStreamRunner {
 object SequenceHandler {
   def apply[A <: Model, B <: DeltaType](
       implicit _repo: Repository[A, B],
-      handler: PartialFunction[Any, Unit],
+      _monoid: Monoid[Sequence[A, B]],
+      handler: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
       name: String,
       as: ActorSystem,
       _ec: ExecutionContext
@@ -70,6 +71,7 @@ object SequenceHandler {
       override val col = res
       override val ec = _ec
       override val repo = _repo
+      override val monoid = _monoid
     }
   }
 }
@@ -78,6 +80,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
 
   implicit val col: BSONCollection
   implicit val ec: ExecutionContext
+  implicit val monoid : Monoid[Sequence[A, B]]
   //implicit val supr: ActorRef
   //implicit val sink: ActorRef
 
@@ -146,11 +149,9 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   /**
     * Program which processes one single delta model operation
     * @param delta data type built from Model2 and DeltaType
-    * @param monoid monoid which provides homomorphims for creating new sequences
     * @return function that is activated with a repo as parameter and returns one operation result.
     */
-  def process(delta: DeltaModel2[A, B])(
-      implicit monoid: Monoid[Sequence[A, B]]): Task[Sequence[A, B]] = {
+  def process(delta: DeltaModel2[A, B]): Task[Sequence[A, B]] = {
 
     for {
       a <- liftT(delta.model)
@@ -176,11 +177,9 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
     * Program which processes one single delta model operation. Updated to print sequence
     * TODO: Change to Monad transformer
     * @param delta data type built from Model2 and DeltaType
-    * @param monoid monoid which provides homomorphims for creating new sequences
     * @return function that is activated with a repo as parameter and returns one operation result.
     */
   def processWithIO(delta: DeltaModel2[A, B])(
-      implicit monoid: Monoid[Sequence[A, B]],
       f: Sequence[A, B] => Unit): Task[Sequence[A, B]] = {
 
     for {
@@ -207,17 +206,16 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
     * This function process a bunch of delta models using Task type. Task are suspended inside a Trampoline to be executed
     * sequential to avoid race conditions when executing in one sequence model
     * @param list
-    * @param monoid
     * @return
     */
   def processBatchinOneModel(
       list: List[DeltaModel2[A, B]],
       n: Int,
-      acc: List[DeltaModel2[A, B]])(implicit monoid: Monoid[Sequence[A, B]])
+      acc: List[DeltaModel2[A, B]])
     : (Task[(Int, List[DeltaModel2[A, B]])]) = {
     list match {
       case h :: t =>
-        process(h)(monoid) flatMap { p =>
+        process(h) flatMap { p =>
           p match {
             case AnySequence(id, deltas) => {
               val seq = processBatchinOneModel(t, n + 1, deltas ++ acc)
@@ -249,7 +247,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
       case h :: t =>
         h match {
           case (k, e) =>
-            processWithIO(e)(monoid, f(k)) flatMap {
+            processWithIO(e)(f(k)) flatMap {
               case AnySequence(id, deltas) => {
                 val seq =
                   processBatchInOneModeWithId(t, n + 1, deltas ++ acc, f)

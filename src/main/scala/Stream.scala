@@ -98,13 +98,15 @@ final class StreamRunner[A <: Model, B <: DeltaType](
     .groupedWithin(grouped, milliss milliseconds)
     .map(_.foldLeft(List[A]()) { (a, b) =>
       cv.from(b) match {
-        case Success(line) =>
+        case Success(line) => {
           line :: a
-        case Failure(err) =>
+        }
+        case Failure(err) => {
           Nil
+        }
       }
     })
-    .map(InputMsgs(_))
+    .map(e => { InputMsgs(e) })
     .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))
 
   checkIfSinkIsActive(sink).onComplete(

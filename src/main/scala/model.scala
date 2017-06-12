@@ -19,7 +19,18 @@ object Sequence {
 
 case class DeltaModel2[A, B](model: A, delta: B)
 
-trait DeltaType
+
+object DeltaModel2 {
+  def apply[A](m: A) : DeltaModel2[A, _] = DeltaModel2(m, DeltaType.unit)
+}
+
+trait DeltaType {
+  def unit : DeltaType
+}
+
+object DeltaType {
+  def unit : DeltaType = DeltaType.unit
+}
 
 trait Model { self =>
   val id: String

@@ -47,7 +47,7 @@ final class SinkActor[A <: Model, B <: DeltaType](
   /** Process will start as soon as databse is ready **/
   var origin = sender()
 
-  val partial = func.andThen { case (ngrps, list)  =>
+  val partial = func andThen { case (ngrps, list)  =>
     handler.processBatchinOneModel(list, 0, Nil)
     .unsafePerformAsync { result =>
       val _result = checkTaskResultAndFlatten(result, self)
@@ -57,25 +57,25 @@ final class SinkActor[A <: Model, B <: DeltaType](
     }
   }
 
-  override def receive: Receive = _receive orElse partial
+  def receive: Receive = partial orElse _receive
 
-  def _receive: Receive = {
+  def _receive: PartialFunction[Any, Unit] = {
 
     /** Sink actor initialization **/
     case `initMessage` => {
-      log.debug("Initializing sink actor")
+      log.info("Initializing sink actor")
       sender() ! ackMessage
     }
 
     case `healthCheck` => {
-      log.debug("Heartbeat received")
+      log.info("Heartbeat received")
       sender ! ready
     }
 
     /** Error sent. Just log and ignore **/
     case a: AnyRef => {
       log.error(s"ERROR. Unhanded message ${a}")
-      origin ! ackMessage
+      sender ! ackMessage
     }
   }
 }
