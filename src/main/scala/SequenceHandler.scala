@@ -8,6 +8,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scalaz.Monoid
 import scalaz.concurrent.Task
 import scala.concurrent.duration._
+import scalaz.effect.IO
 
 /** A trait that configures the algebra for the Sequencer model. It is
   *   parametrized on one type parameter that represent the following:
@@ -42,15 +43,18 @@ import scala.concurrent.duration._
   *  @review 26/04/2017 Transform Sequence handler to Future sh
   */
 object SequenceHandlerStreamRunner {
-  def apply[A <: Model, B <: DeltaType](
-      seqHandler: SequenceHandler[A, B])(
+  def apply[A <: Model, B <: DeltaType](seqHandler: SequenceHandler[A, B])(
       implicit as: ActorSystem,
       func: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
       cv: CSVConverter[A]) = {
 
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
-      Props.create(classOf[SinkActor[A, B]], seqHandler, func, taskSupervisor, seqHandler.monoid))
+      Props.create(classOf[SinkActor[A, B]],
+                   seqHandler,
+                   func,
+                   taskSupervisor,
+                   seqHandler.monoid))
     val stream = new StreamRunner[A, B](sinkStream)
   }
 }
@@ -62,7 +66,8 @@ object SequenceHandler {
       handler: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
       name: String,
       as: ActorSystem,
-      _ec: ExecutionContext
+      _ec: ExecutionContext,
+      _io: Sequence[A, B] => Unit
   ): Future[SequenceHandler[A, B]] = Future {
     new SequenceHandler[A, B] {
 
@@ -72,6 +77,7 @@ object SequenceHandler {
       override val ec = _ec
       override val repo = _repo
       override val monoid = _monoid
+      override val io = _io
     }
   }
 }
@@ -80,9 +86,8 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
 
   implicit val col: BSONCollection
   implicit val ec: ExecutionContext
-  implicit val monoid : Monoid[Sequence[A, B]]
-  //implicit val supr: ActorRef
-  //implicit val sink: ActorRef
+  implicit val monoid: Monoid[Sequence[A, B]]
+  implicit val io: Sequence[A, B] => Unit
 
   val repo: Repository[A, B]
 
@@ -160,16 +165,17 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
         b match {
           case AnySequence(id, list) => {
             val seq = monoid.append(b, AnySequence(id, delta :: Nil))
-            (updateSequence(delta.model, seq)(repo))
+            updateSequence(delta.model, seq)(repo)
           }
           case NoSequence => {
             // TODO: Delete this !!!
             monoid.append(b, AnySequence(delta.model.id, delta :: Nil))
             val seq = AnySequence(delta.model.id, delta :: Nil)
-            (insertSequence(seq)(repo))
+            insertSequence(seq)(repo)
           }
         }
       }
+      _ <- { io(c); Task(c) }
     } yield c
   }
 
@@ -211,8 +217,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   def processBatchinOneModel(
       list: List[DeltaModel2[A, B]],
       n: Int,
-      acc: List[DeltaModel2[A, B]])
-    : (Task[(Int, List[DeltaModel2[A, B]])]) = {
+      acc: List[DeltaModel2[A, B]]): (Task[(Int, List[DeltaModel2[A, B]])]) = {
     list match {
       case h :: t =>
         process(h) flatMap { p =>

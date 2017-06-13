@@ -1,13 +1,8 @@
 package com.bbvalabs.ai.sequence.app
 
-import akka.actor.ActorSystem
 import com.bbvalabs.ai._
-import com.bbvalabs.ai.runtime.InputMsgs
-import com.bbvalabs.ai.sequence.app.Functions.append
 
-import scala.concurrent.ExecutionContext
 import scala.util.Success
-import scalaz.concurrent.Task
 
 /** Steps to create one sequence model:
   *
@@ -54,17 +49,15 @@ case class Delta1(time: Double) extends DeltaType {
 }
 
 object Functions {
-
-  import implicits._
+  import Model._
 
   def append(_new: Model1, last: Model1): (Model1, Delta1) =
     (_new, Delta1(_new.timestamp - last.timestamp))
 
-  def printVector(ev: Model1, delta: Delta1): Unit = {
-    val result = ev.copy(field1 = None)
-    result ~> delta print
+  def printVector(ev: Model1, delta: Delta1) = {
+    val result = ev
+    ~>>> (result)(delta)
   }
-
 }
 
 object app1 {
@@ -73,22 +66,12 @@ object app1 {
     import implicits._
     import com.bbvalabs.ai.Implicits._
 
+    import Functions._
+
     implicit val _modelName: String = "seq1"
     implicit def f = append _ lift
 
-    /*
-    implicit val func : PartialFunction[Any, (Int, List[DeltaModel2[Model1, Delta1]])] = {
-      case a:InputMsgs[Model1] => {
-        val g = group(a.list)(_.id)
-        val s = g.size
-
-        val q = g.toList.flatMap { l =>
-          val s1 = l._2
-          s1.map(m => DeltaModel2(m, Delta1(0)))
-        }
-        (0, q)
-      }
-    }*/
+    implicit val l: Delta1 = Delta1(0)
 
     val seq = SequenceHandler[Model1, Delta1]
 

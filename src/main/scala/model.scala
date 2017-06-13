@@ -17,11 +17,11 @@ object Sequence {
   def unit[A, B] = AnySequence("", Nil)
 }
 
-case class DeltaModel2[A, B](model: A, delta: B)
+case class DeltaModel2[+A, +B](model: A, delta: B)
 
 
 object DeltaModel2 {
-  def apply[A](m: A) : DeltaModel2[A, _] = DeltaModel2(m, DeltaType.unit)
+  def apply[A](m: A) : DeltaModel2[A, _ <: DeltaType] = DeltaModel2(m, DeltaType.unit)
 }
 
 trait DeltaType {
@@ -39,4 +39,7 @@ trait Model { self =>
 object Model {
   def apply(implicit instance: Model) : Model = instance
   def init_delta[A <: Model, B <: DeltaType](in: A) (f: A => B) : B = f(in)
+  def ~>>>[A <: Model, B <: DeltaType] = (model: A) => (delta: DeltaType) =>  {
+    DeltaModel2(model, delta)
+  }
 }

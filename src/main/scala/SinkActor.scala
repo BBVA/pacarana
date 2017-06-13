@@ -44,15 +44,16 @@ final class SinkActor[A <: Model, B <: DeltaType](
   val notReady: String = "notready"
   val ready: String = "ready"
 
-  /** Process will start as soon as databse is ready **/
-  var origin = sender()
+  /** Process will start as soon as database is ready **/
 
   val partial = func andThen { case (ngrps, list)  =>
+    var origin = sender()
     handler.processBatchinOneModel(list, 0, Nil)
     .unsafePerformAsync { result =>
       val _result = checkTaskResultAndFlatten(result, self)
-      if (_result.isLeft)
+      if (_result.isLeft) {
         log.error(s"Error executing task ${_result.left}")
+      }
       ackref ! AckBox(ngrps, _result.getOrElse(0), origin)
     }
   }
