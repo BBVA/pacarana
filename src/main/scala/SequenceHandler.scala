@@ -67,7 +67,7 @@ object SequenceHandler {
       name: String,
       as: ActorSystem,
       _ec: ExecutionContext,
-      _io: Sequence[A, B] => Unit
+      _io: DeltaModel2[A, B] => Sequence[A, B] => Unit
   ): Future[SequenceHandler[A, B]] = Future {
     new SequenceHandler[A, B] {
 
@@ -87,7 +87,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   implicit val col: BSONCollection
   implicit val ec: ExecutionContext
   implicit val monoid: Monoid[Sequence[A, B]]
-  implicit val io: Sequence[A, B] => Unit
+  implicit val io: DeltaModel2[A, B] => Sequence[A, B] => Unit
 
   val repo: Repository[A, B]
 
@@ -175,7 +175,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
           }
         }
       }
-      _ <- { io(c); Task(c) }
+      _ <- { io(delta)(c); Task(c) }
     } yield c
   }
 

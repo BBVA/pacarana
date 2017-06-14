@@ -41,6 +41,7 @@ import scala.util.Success
 case class Model1(id: String,
                   field1: Option[String],
                   field2: Int,
+                  tag: String,
                   timestamp: Double)
   extends Model
 
@@ -50,13 +51,16 @@ case class Delta1(time: Double) extends DeltaType {
 
 object Functions {
   import Model._
+  import Implicits._
 
   def append(_new: Model1, last: Model1): (Model1, Delta1) =
     (_new, Delta1(_new.timestamp - last.timestamp))
 
-  def printVector(ev: Model1, delta: Delta1) = {
-    val result = ev
-    ~>>> (result)(delta)
+  def ignore(ev: Model1) : Model1 =
+    ev.copy(field1 = None)
+
+  def label(ev: Model1) : String = {
+    ev.field2.toString
   }
 }
 
@@ -70,7 +74,8 @@ object app1 {
 
     implicit val _modelName: String = "seq1"
     implicit def f = append _ lift
-
+    implicit def la = label _
+    //implicit def lb = ignore _
     implicit val l: Delta1 = Delta1(0)
 
     val seq = SequenceHandler[Model1, Delta1]

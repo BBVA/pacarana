@@ -68,33 +68,33 @@ object Implicits {
     }
   }
 
-  implicit class printModel[A, B](in: DeltaModel2[A, B]) {
-    def print(implicit mconverter: CSVConverter[A],
-              dconverter: CSVConverter[B]): String = {
-      val model = mconverter.to(in.model)
-      val delta = dconverter.to(in.delta)
-      s"${model + delta}"
+  implicit class appendArrow[A <: Model, B <: DeltaType, C](
+      in: DeltaModel2[A, B]) {
+    def <<<~ (f: A => String): String =  {
+      f(in.model)
     }
   }
 
-  implicit def printM[A, B](
+  implicit def printSequence[A <: Model, B <: DeltaType](
       implicit mconverter: CSVConverter[A],
-      dconverter: CSVConverter[B])
-      : DeltaModel2[A, B] => String = { in =>
-    val model = mconverter.to(in.model)
-    val delta = dconverter.to(in.delta)
-    s"${model + delta}"
-  }
-
-  implicit def printSequence[A <: Model, B <: DeltaType](in: Sequence[A, B])(implicit p: DeltaModel2[A, B] => String): Unit = {
-    in match {
-      case AnySequence(_, l) =>
-        println(l.foldLeft("")((a, acc) => {
-          a ++ p(acc)
-        }))
-      case _ => // do nothing
+      dconverter: CSVConverter[B],
+      f: A => String,
+      d: A => A
+  ) =
+    (d2: DeltaModel2[A, B]) => (in: Sequence[A, B]) => {
+        in match {
+          case AnySequence(_, l) => {
+            val dlist = l.foldLeft("")((a, d2) => {
+              val d2p = d(d2.model)
+              val model = mconverter.to(d2p)
+              val delta = dconverter.to(d2.delta)
+              a ++ s"${model + delta}"
+            })
+            println(s"${dlist}${f(d2.model)}")
+          }
+          case _ => // do nothing
+        }
     }
-  }
 
   def group[A, K](list: List[A])(f: A => K): Map[K, List[A]] = {
     list.groupBy(f)
