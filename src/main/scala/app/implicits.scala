@@ -17,8 +17,5 @@ object implicits {
 
   implicit val c1 = derived.codec[Delta1]
   implicit val c2 = derived.codec[Model1]
-  implicit val c3 =
-    derived.codec[DeltaModel2[Model1, Delta1]]
-  implicit val c4 = derived.codec[AnySequence[Model1, Delta1]]
 
 }

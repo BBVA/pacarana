@@ -34,7 +34,7 @@ object CSVConverter {
     }
 
   implicit def intCsvConverter: CSVConverter[Int] = new CSVConverter[Int] {
-    def from(s: String): Try[Int] = Try(s.toInt)
+    def from(s: String): Try[Int] = { Try(s.toInt) }
 
     def to(i: Int): String = i.toString
   }
@@ -46,7 +46,7 @@ object CSVConverter {
         if (s == null || s.isEmpty) Success(None)
         else {
           ec.from(s) match {
-              case Success(e) => { Success(Some(e)) }
+            case Success(e) => { Success(Some(e)) }
             case _ => { Success(None) }
           }
         }
@@ -86,7 +86,23 @@ object CSVConverter {
       def to(l: List[A]): String = l.map(ec.to).mkString("\n")
     }
 
-  // HList
+  implicit def runnerModelConverter[A, B <: Model](
+      implicit c1: CSVConverter[A],
+      c2: CSVConverter[B]): CSVConverter[(A, B)] = {
+    new CSVConverter[(A, B)] {
+      override def from(s: String): Try[(A, B)] = {
+        val result = s.split(",")
+        val head = c1.from(result(0))
+        val tail = result.drop(1)
+        val tailStr = tail.foldLeft("")(_ ++ _)
+        Try(head.get, c2.from("1,2,3,4,5").get)
+      }
+
+      override def to(t: (A, B)): String = {
+        s"${c2.to(t._2)}${c1.to(t._1)}"
+      }
+    }
+  }
 
   implicit def deriveHNil: CSVConverter[HNil] =
     new CSVConverter[HNil] {

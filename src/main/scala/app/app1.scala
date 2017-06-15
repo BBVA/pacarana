@@ -2,7 +2,7 @@ package com.bbvalabs.ai.sequence.app
 
 import com.bbvalabs.ai._
 
-import scala.util.Success
+import scala.util._
 
 /** Steps to create one sequence model:
   *
@@ -37,30 +37,27 @@ import scala.util.Success
   *  @author  Emiliano Martinez
   *  @date  02/06/2017
   */
-
 case class Model1(id: String,
                   field1: Option[String],
-                  field2: Int,
+                  field2: Option[Int],
                   tag: String,
                   timestamp: Double)
-  extends Model
+    extends Model
 
 case class Delta1(time: Double) extends DeltaType {
   override def unit = Delta1(0)
 }
 
 object Functions {
-  import Model._
-  import Implicits._
-
   def append(_new: Model1, last: Model1): (Model1, Delta1) =
     (_new, Delta1(_new.timestamp - last.timestamp))
 
-  def ignore(ev: Model1) : Model1 =
-    ev.copy(field1 = None)
+  def ignore(ev: Model1): Option[Model1] = {
+    Some(ev.copy(field1 = None, field2 = None))
+  }
 
-  def label(ev: Model1) : String = {
-    ev.field2.toString
+  def label(ev: Model1): String = {
+    ev.field2.get.toString
   }
 }
 
@@ -73,17 +70,15 @@ object app1 {
     import Functions._
 
     implicit val _modelName: String = "seq1"
-    implicit def f = append _ lift
-    implicit def la = label _
-    //implicit def lb = ignore _
     implicit val l: Delta1 = Delta1(0)
 
     val seq = SequenceHandler[Model1, Delta1]
 
     seq.onComplete {
       case Success(handler) => {
-        SequenceHandlerStreamRunner[Model1, Delta1](handler)
+        SequenceHandlerStreamRunner(handler)
       }
+      case Failure(_) => System.exit(-1)
     }
   }
 

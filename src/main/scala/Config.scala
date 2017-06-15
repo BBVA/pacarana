@@ -12,7 +12,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 object MongoConf {
 
-
   private val config = ConfigFactory.load()
   lazy val mongo: Config = config.getConfig("mongodb")
 
@@ -26,8 +25,7 @@ object MongoConf {
     FailoverStrategy(
       initialDelay = 500 milliseconds,
       retries = 2000,
-      delayFactor =
-        attemptNumber => 1 + attemptNumber * 0.5
+      delayFactor = attemptNumber => 1 + attemptNumber * 0.5
     )
 
   val con: MongoConnection = driver.connection(List(mongoUri))

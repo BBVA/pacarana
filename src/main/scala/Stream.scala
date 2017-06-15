@@ -24,8 +24,6 @@ case class InputMsgs[A <: Model](list: List[A])
 object StreamOps {
 
   /** TODO: Extract to config **/
-  val grouped = 1
-  val milliss = 1
 
   final class StdinSourceStage extends GraphStage[SourceShape[String]] {
     val out: Outlet[String] = Outlet("Stdin.out")
@@ -80,14 +78,15 @@ final class StreamRunner[A <: Model, B <: DeltaType](
     sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[A]) {
 
   import StreamOps._
+  import Settings._
 
   implicit val ec = as.dispatcher
   implicit val materializer = ActorMaterializer()
 
-  val ackMessage = "ack"
-  val initMessage = "start"
+  val ackMessage      = "ack"
+  val initMessage     = "start"
   val completeMessage = "complete"
-  val healthCheck = "heartbeat"
+  val healthCheck     = "heartbeat"
 
   val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
 
