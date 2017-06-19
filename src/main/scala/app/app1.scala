@@ -53,7 +53,8 @@ object Functions {
     (_new, Delta1(_new.timestamp - last.timestamp))
 
   def ignore(ev: Model1): Option[Model1] = {
-    Some(ev.copy(field1 = None, field2 = None))
+    //Some(ev.copy(field1 = None, field2 = None))
+    None
   }
 
   def label(ev: Model1): String = {
@@ -72,10 +73,12 @@ object app1 {
     implicit val _modelName: String = "seq1"
     implicit val l: Delta1 = Delta1(0)
 
+
     val seq = SequenceHandler[Model1, Delta1]
 
     seq.onComplete {
       case Success(handler) => {
+        //SequenceHandlerStreamTrainer(handler)
         SequenceHandlerStreamRunner(handler)
       }
       case Failure(_) => System.exit(-1)

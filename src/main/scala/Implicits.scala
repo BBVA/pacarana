@@ -1,13 +1,13 @@
 package com.bbvalabs.ai
 
 import akka.actor.ActorSystem
-import com.bbvalabs.ai.runtime.InputMsgs
+import com.bbvalabs.ai.runtime.{InputMsgs, InputMsgsRunner}
 import reactivemongo.bson.{BSONDocumentHandler, derived}
 import Settings._
 import com.bbvalabs.ai.sequence.app.Functions.{append, ignore, label}
 
 import scala.concurrent.ExecutionContext
-import scalaz.Monoid
+import scalaz.{-\/, Monoid, \/, \/-}
 
 /**
   * Created by emiliano on 24/3/17.
@@ -39,7 +39,27 @@ object Implicits {
         val s1 = l._2
         s1.map(m => DeltaModel2(m, d))
       }
+      // INFO: There is nothing wrong with this. It is include to avoid type erasure warning compiler.
+      // Emiliano Martinez. 16/06/2017
+      // TODO: Try to figure out a better choice
       (s, q.asInstanceOf[List[DeltaModel2[A, B]]])
+    }
+  }
+
+  implicit def partialfuncRunner[A <: Model, B <: DeltaType](implicit d: B)
+    : PartialFunction[Any, (Int, List[(String, DeltaModel2[A, B])])] = {
+    case models: InputMsgsRunner[_] => {
+      val m = models.list.map(_._2)
+      val id = models.list.map(_._1).head
+      val g = group(m)(_.id)
+      val s = g.size
+      val q = g.toList.flatMap { l =>
+        val s1 = l._2
+        s1.map(m => (id, DeltaModel2(m, d)))
+      }
+      // INFO: There is nothing wrong with this. It is include to avoid type erasure warning compiler.
+      // TODO: Try to figure out a better choice
+      (s, q.asInstanceOf[List[(String, DeltaModel2[A, B])]])
     }
   }
 
@@ -57,11 +77,12 @@ object Implicits {
     def lift: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
       {
         (o, n) match {
-          case (AnySequence(oid, olist), AnySequence(nid, nlist)) =>
+          case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
+
             AnySequence(
               nid,
-              f(nlist.head.model, olist.last.model).liftToDelta :: olist)
-
+              f(nlist.head.model, olist.last.model).liftToDelta :: { if(olist.length == entries) olist.dropRight(1) else olist})
+          }
           case (NoSequence, seq) => {
             seq
           }
@@ -85,27 +106,57 @@ object Implicits {
       f: A => String,
       d: A => Option[A]
   ) =
-    (d2: DeltaModel2[A, B]) =>
-      (in: Sequence[A, B]) => {
-        in match {
-          case AnySequence(_, l) => {
-            if (l.length == entries) {
-              val dlist = l.foldLeft("")((a, d2) => {
-                val d2p = d(d2.model)
-                val model = d2p match {
-                  case Some(d) =>
-                    mconverter.to(d)
-                  case None =>
-                    mconverter.to(d2.model)
+    (d2: (String, DeltaModel2[A, B]) \/ DeltaModel2[A, B]) => {
+      (in: Sequence[A, B]) =>
+        {
+          d2 match {
+            case -\/(resdis) => {
+              val k = resdis._1
+              val m = resdis._2
+              in match {
+                case AnySequence(_, l) => {
+                  if (l.length == entries) {
+                    val dlist = l.foldLeft("")((a, d2) => {
+                      val d2p = d(d2.model)
+                      val model = d2p match {
+                        case Some(d) =>
+                          mconverter.to(d)
+                        case None =>
+                          mconverter.to(d2.model)
+                      }
+                      val delta = dconverter.to(d2.delta)
+                      a ++ s"${model + delta}"
+                    })
+                    println(s"${k},${dlist.dropRight(1)}")
+                  }
                 }
-                val delta = dconverter.to(d2.delta)
-                a ++ s"${model + delta}"
-              })
-              println(s"${dlist}${f(d2.model)}")
+                case _ => println("Doing nothing")// Do nothing
+              }
+            }
+            case \/-(resdis) => {
+              in match {
+                case AnySequence(_, l) => {
+                  if (l.length == entries) {
+                    val dlist = l.foldLeft("")((a, d2) => {
+                      val d2p = d(d2.model)
+                      val model = d2p match {
+                        case Some(d) =>
+                          mconverter.to(d)
+                        case None =>
+                          mconverter.to(d2.model)
+                      }
+                      val delta = dconverter.to(d2.delta)
+                      a ++ s"${model + delta}"
+                    })
+                    println(s"${dlist}${f(resdis.model)}")
+                  }
+                }
+                case _ => // Do nothing
+              }
             }
           }
-          case _ => // do nothing
         }
+
     }
 
   def group[A, K](list: List[A])(f: A => K): Map[K, List[A]] = {

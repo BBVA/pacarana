@@ -19,7 +19,9 @@ import scalaz.{-\/, \/, \/-}
 /**
   * Created by e049627 on 5/6/17.
   */
+case class TubledBox[A <: Model](t: List[(String, A)])
 case class InputMsgs[A <: Model](list: List[A])
+case class InputMsgsRunner[A <: Model](list: List[(String, A)])
 
 object StreamOps {
 
@@ -74,7 +76,7 @@ object StreamOps {
   }
 }
 
-final class StreamRunner[A <: Model, B <: DeltaType](
+final class StreamTrainer[A <: Model, B <: DeltaType](
     sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[A]) {
 
   import StreamOps._
@@ -106,6 +108,44 @@ final class StreamRunner[A <: Model, B <: DeltaType](
       }
     })
     .map(e => { InputMsgs(e) })
+    .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))
+
+  checkIfSinkIsActive(sink).onComplete(
+    _ => stream.run()
+  )
+}
+
+final class StreamRunner[A <: Model, B <: DeltaType](sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[(String, A)]) {
+  import StreamOps._
+  import Settings._
+
+  implicit val ec = as.dispatcher
+  implicit val materializer = ActorMaterializer()
+
+  val ackMessage      = "ack"
+  val initMessage     = "start"
+  val completeMessage = "complete"
+  val healthCheck     = "heartbeat"
+
+  val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
+
+  val stdinSource: Source[String, NotUsed] =
+    Source.fromGraph(sourceGraph).async
+
+  // TODO: Common factor. The only diference is CSV converter
+  val stream = stdinSource
+    .groupedWithin(grouped, milliss milliseconds)
+    .map(_.foldLeft(List[(String, A)]()) { (a, b) =>
+      cv.from(b) match {
+        case Success(line) => {
+          line :: a
+        }
+        case Failure(err) => {
+          Nil
+        }
+      }
+    })
+    .map(e => InputMsgsRunner(e) )
     .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))
 
   checkIfSinkIsActive(sink).onComplete(

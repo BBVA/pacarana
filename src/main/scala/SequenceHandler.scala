@@ -1,14 +1,16 @@
 package com.bbvalabs.ai
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import com.bbvalabs.ai.runtime.{SinkActor, StreamRunner, TaskSupervisor}
+import com.bbvalabs.ai.runtime._
 import reactivemongo.api.collections.bson.BSONCollection
 
+import scalaz._, Scalaz._
+
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scalaz.Monoid
+import scalaz.{Monoid, \/}
 import scalaz.concurrent.Task
 import scala.concurrent.duration._
-import scalaz.effect.IO
+
 
 /** A trait that configures the algebra for the Sequencer model. It is
   *   parametrized on one type parameter that represent the following:
@@ -42,7 +44,7 @@ import scalaz.effect.IO
   *
   *  @review 26/04/2017 Transform Sequence handler to Future sh
   */
-object SequenceHandlerStreamRunner {
+object SequenceHandlerStreamTrainer {
   def apply[A <: Model, B <: DeltaType](seqHandler: SequenceHandler[A, B])(
       implicit as: ActorSystem,
       func: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
@@ -55,6 +57,24 @@ object SequenceHandlerStreamRunner {
                    func,
                    taskSupervisor,
                    seqHandler.monoid))
+    val stream = new StreamTrainer[A, B](sinkStream)
+  }
+}
+
+// TODO: Check if it is possible common factor
+object SequenceHandlerStreamRunner {
+  def apply[A <: Model, B <: DeltaType](seqHandler: SequenceHandler[A, B])(
+      implicit as: ActorSystem,
+      func: PartialFunction[Any, (Int, List[(String, DeltaModel2[A, B])])],
+      cv: CSVConverter[(String, A)]) = {
+
+    val taskSupervisor = as.actorOf(Props[TaskSupervisor])
+    val sinkStream = as.actorOf(
+      Props.create(classOf[SinkActorRunner[A, B]],
+                   seqHandler,
+                   func,
+                   taskSupervisor,
+                   seqHandler.monoid))
     val stream = new StreamRunner[A, B](sinkStream)
   }
 }
@@ -63,11 +83,10 @@ object SequenceHandler {
   def apply[A <: Model, B <: DeltaType](
       implicit _repo: Repository[A, B],
       _monoid: Monoid[Sequence[A, B]],
-      handler: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
       name: String,
       as: ActorSystem,
       _ec: ExecutionContext,
-      _io: DeltaModel2[A, B] => Sequence[A, B] => Unit
+      _io: ((String, DeltaModel2[A, B]) \/ DeltaModel2[A, B]) => Sequence[A, B] => Unit
   ): Future[SequenceHandler[A, B]] = Future {
     new SequenceHandler[A, B] {
 
@@ -87,7 +106,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   implicit val col: BSONCollection
   implicit val ec: ExecutionContext
   implicit val monoid: Monoid[Sequence[A, B]]
-  implicit val io: DeltaModel2[A, B] => Sequence[A, B] => Unit
+  implicit val io: ((String, DeltaModel2[A, B]) \/ DeltaModel2[A, B]) => Sequence[A, B] => Unit
 
   val repo: Repository[A, B]
 
@@ -175,7 +194,35 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
           }
         }
       }
-      _ <- { io(delta)(c); Task(c) }
+      _ <- {
+        io(delta.right)(c); Task(c)
+      }
+    } yield c
+  }
+
+  def processTupled(deltaT: (String, DeltaModel2[A, B])): Task[Sequence[A, B]] = {
+    //TODO: All is the same except io call
+    val d = deltaT._2
+    val k = deltaT._1
+
+    for {
+      a <- liftT(d.model)
+      b <- get(d.model)(repo)
+      c <- {
+        b match {
+          case AnySequence(id, list) => {
+            val seq = monoid.append(b, AnySequence(id, d :: Nil))
+            updateSequence(d.model, seq)(repo)
+          }
+          case NoSequence => {
+            // TODO: Delete this !!!
+            monoid.append(b, AnySequence(d.model.id, d :: Nil))
+            val seq = AnySequence(d.model.id, d :: Nil)
+            insertSequence(seq)(repo)
+          }
+        }
+      }
+      _ <- { io(deltaT.left)(c); Task(c) }
     } yield c
   }
 
@@ -224,6 +271,25 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
           p match {
             case AnySequence(id, deltas) => {
               val seq = processBatchinOneModel(t, n + 1, deltas ++ acc)
+              Task.suspend(seq)
+            }
+            case NoSequence => Task { (n, acc) }
+          }
+        }
+      case Nil => Task { (n, acc) }
+    }
+  }
+
+  def processBatchinOneModelTupled(
+      list: List[(String, DeltaModel2[A, B])],
+      n: Int,
+      acc: List[DeltaModel2[A, B]]): (Task[(Int, List[DeltaModel2[A, B]])]) = {
+    list match {
+      case h :: t =>
+        processTupled(h) flatMap { p =>
+          p match {
+            case AnySequence(id, deltas) => {
+              val seq = processBatchinOneModelTupled(t, n + 1, deltas ++ acc)
               Task.suspend(seq)
             }
             case NoSequence => Task { (n, acc) }

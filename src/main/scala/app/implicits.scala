@@ -13,7 +13,7 @@ object implicits {
 
   import Implicits._
 
-  implicit val modelConverter = CSVConverter[Model1]
+  implicit val modelConverter1 = CSVConverter[Model1]
 
   implicit val c1 = derived.codec[Delta1]
   implicit val c2 = derived.codec[Model1]

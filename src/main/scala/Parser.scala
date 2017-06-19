@@ -94,8 +94,8 @@ object CSVConverter {
         val result = s.split(",")
         val head = c1.from(result(0))
         val tail = result.drop(1)
-        val tailStr = tail.foldLeft("")(_ ++ _)
-        Try(head.get, c2.from("1,2,3,4,5").get)
+        val tailStr = tail.foldLeft("")(_ ++ "," ++_).drop(1)
+        Try(head.get, c2.from(tailStr).get)
       }
 
       override def to(t: (A, B)): String = {
