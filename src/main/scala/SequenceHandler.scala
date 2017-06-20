@@ -45,10 +45,11 @@ import scala.concurrent.duration._
   *  @review 26/04/2017 Transform Sequence handler to Future sh
   */
 object SequenceHandlerStreamTrainer {
-  def apply[A <: Model, B <: DeltaType](seqHandler: SequenceHandler[A, B])(
+  def apply[A <: Model, B <: DeltaType, C](seqHandler: SequenceHandler[A, B])(
       implicit as: ActorSystem,
       func: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
-      cv: CSVConverter[A]) = {
+      cv: CSVConverter[A],
+      ford: A => C, ord: scala.Ordering[C]) = {
 
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
@@ -57,7 +58,7 @@ object SequenceHandlerStreamTrainer {
                    func,
                    taskSupervisor,
                    seqHandler.monoid))
-    val stream = new StreamTrainer[A, B](sinkStream)
+    new StreamTrainer[A, B, C](sinkStream)
   }
 }
 
@@ -75,7 +76,7 @@ object SequenceHandlerStreamRunner {
                    func,
                    taskSupervisor,
                    seqHandler.monoid))
-    val stream = new StreamRunner[A, B](sinkStream)
+    new StreamRunner[A, B](sinkStream)
   }
 }
 

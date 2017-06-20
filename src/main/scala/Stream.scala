@@ -39,6 +39,8 @@ object StreamOps {
             val str = StdIn.readLine()
             if (str != null)
               push(out, str)
+            else
+              complete(out)
           }
         })
       }
@@ -76,8 +78,8 @@ object StreamOps {
   }
 }
 
-final class StreamTrainer[A <: Model, B <: DeltaType](
-    sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[A]) {
+final class StreamTrainer[A <: Model, B <: DeltaType, C](
+    sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[A], ford: A => C, ord: Ordering[C]) {
 
   import StreamOps._
   import Settings._
@@ -107,7 +109,7 @@ final class StreamTrainer[A <: Model, B <: DeltaType](
         }
       }
     })
-    .map(e => { InputMsgs(e) })
+    .map(e => { InputMsgs(e.sortBy(ford)) })
     .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))
 
   checkIfSinkIsActive(sink).onComplete(

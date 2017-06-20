@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import com.bbvalabs.ai.runtime.{InputMsgs, InputMsgsRunner}
 import reactivemongo.bson.{BSONDocumentHandler, derived}
 import Settings._
-import com.bbvalabs.ai.sequence.app.Functions.{append, ignore, label}
 
 import scala.concurrent.ExecutionContext
 import scalaz.{-\/, Monoid, \/, \/-}
@@ -78,10 +77,33 @@ object Implicits {
       {
         (o, n) match {
           case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
-
             AnySequence(
               nid,
-              f(nlist.head.model, olist.last.model).liftToDelta :: { if(olist.length == entries) olist.dropRight(1) else olist})
+              f(nlist.head.model, olist.last.model).liftToDelta :: {
+                if (olist.length == entries) olist.dropRight(1) else olist
+              })
+          }
+          case (NoSequence, seq) => {
+            seq
+          }
+
+          case _ => NoSequence
+        }
+      }
+    }
+  }
+
+  implicit class liftInMonoidForSequence[A, B](f: (A, List[A]) => (A, B)) {
+    def lift: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
+      {
+        (o, n) match {
+          case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
+            val omodel = olist.map(_.model)
+            AnySequence(
+              nid,
+              f(nlist.head.model, omodel).liftToDelta :: {
+                if (olist.length == entries) olist.dropRight(1) else olist
+              })
           }
           case (NoSequence, seq) => {
             seq
@@ -130,7 +152,7 @@ object Implicits {
                     println(s"${k},${dlist.dropRight(1)}")
                   }
                 }
-                case _ => println("Doing nothing")// Do nothing
+                case _ =>  // Do nothing
               }
             }
             case \/-(resdis) => {
@@ -156,7 +178,6 @@ object Implicits {
             }
           }
         }
-
     }
 
   def group[A, K](list: List[A])(f: A => K): Map[K, List[A]] = {
@@ -177,10 +198,62 @@ object Implicits {
       inst2: BSONDocumentHandler[B]): BSONDocumentHandler[AnySequence[A, B]] =
     derived.codec[AnySequence[A, B]]
 
-  implicit def f = append _ lift
-  implicit def la = label _
-  implicit def lb = ignore _
 
   implicit val as = ActorSystem("sequence-handler")
   implicit val ec = as.dispatcher
+
+  trait CommonFilterAndLabel[A <: Model] {
+    /**
+      * This function drops the fields from the output. These fields must be Option
+      * @param _new input object
+      * @return one copy of the input object with the fields to None to drop fields
+      */
+    def ignore(_new: A): Option[A]
+
+    /**
+      * Create the label from the new object. Result must be a string to append to the output sequence
+      * @param _new input object
+      * @return the string which will be used as label
+      */
+    def label(_new:A): String
+    implicit def _ignore = ignore _
+    implicit def _label = label _
+  }
+
+  trait SimpleDelta[A <: Model, B <: DeltaType] {
+    /**
+      * Function to create one delta from the last record in the sequence
+      * @param _new new document
+      * @param last last stored document
+      * @return a Tuple2 with the new object and the new delta
+      */
+    def append(_new: A, last: A): (A, B)
+    implicit def _append = append _ lift
+  }
+
+  trait Aggregate[A <: Model, B <: DeltaType] {
+    /**
+      * Function to create one ore more features from a stored sequence
+      * @param _new
+      * @param storedSequence
+      * @return
+      */
+    def append2(_new: A, storedSequence: List[A]): (A, B)
+    implicit def _append = append2 _ lift
+
+  }
+
+  trait WithOrdering[A <: Model, C] {
+    /**
+      * Function to create ascending order for input stream. In case of reading a bunch of data in training mode.
+      * @param _new
+      * @tparam C
+      * @return
+      */
+    def sortBy(_new: A) : C
+    implicit def sort = sortBy _
+  }
+
 }
+
+

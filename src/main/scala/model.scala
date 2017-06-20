@@ -1,6 +1,5 @@
 package com.bbvalabs.ai
 
-import reactivemongo.bson.derived
 import scala.util.Try
 
 object Sequencer {
@@ -24,9 +23,7 @@ object DeltaModel2 {
   def apply[A](m: A) : DeltaModel2[A, _ <: DeltaType] = DeltaModel2(m, DeltaType.unit)
 }
 
-trait DeltaType {
-  def unit : DeltaType
-}
+trait DeltaType
 
 object DeltaType {
   def unit : DeltaType = DeltaType.unit

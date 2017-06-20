@@ -10,11 +10,12 @@ import scalaz.{-\/, Monoid, \/, \/-}
 object SinkFunctions {
 
   /** Sink actor initialization **/
-  val ackMessage: String = "ack"
+  val ackMessage: String  = "ack"
   val initMessage: String = "start"
   val healthCheck: String = "heartbeat"
-  val notReady: String = "notready"
-  val ready: String = "ready"
+  val notReady: String    = "notready"
+  val ready: String       = "ready"
+  val completeMessage     = "complete"
 
   def getSinkCommonPartialFunction(s: ActorRef)(
       implicit log: LoggingAdapter): PartialFunction[Any, Unit] = {
@@ -26,6 +27,10 @@ object SinkFunctions {
     case `healthCheck` => {
       log.info(s"Heartbeat received. Responding to ${s}")
       s ! ready
+    }
+
+    case `completeMessage` => {
+
     }
 
     /** Error sent. Just log and ignore **/
@@ -91,7 +96,7 @@ final class SinkActor[A <: Model, B <: DeltaType](
   def receive: Receive = partial orElse _receive
 
   def _receive: PartialFunction[Any, Unit] = {
-
+    // TODO: There were problems to extract this partial function due to sender property. Fix IT!!!
     /** Sink actor initialization **/
     case `initMessage` => {
       log.info("Initializing sink actor")
@@ -101,6 +106,11 @@ final class SinkActor[A <: Model, B <: DeltaType](
     case `healthCheck` => {
       log.info("Heartbeat received")
       sender ! ready
+    }
+
+    case `completeMessage` => {
+      log.warning("EOF received. Completing stream and exiting...")
+      context.system.terminate().onComplete(_ => System.exit(0))
     }
 
     /** Error sent. Just log and ignore **/
@@ -140,7 +150,7 @@ final class SinkActorRunner[A <: Model, B <: DeltaType](
   def receive: Receive = partial orElse _receive
 
   def _receive: PartialFunction[Any, Unit] = {
-
+    // TODO: There were problems to extract this partial function due to sender property. Fix IT!!!
     /** Sink actor initialization **/
     case `initMessage` => {
       log.info("Initializing sink actor")
@@ -150,6 +160,11 @@ final class SinkActorRunner[A <: Model, B <: DeltaType](
     case `healthCheck` => {
       log.info("Heartbeat received")
       sender ! ready
+    }
+
+    case `completeMessage` => {
+      log.warning("EOF received. Completing stream and exiting...")
+      context.system.terminate().onComplete(_ => System.exit(0))
     }
 
     /** Error sent. Just log and ignore **/
