@@ -1,6 +1,6 @@
 name := "sequence-handler-core"
 
-version := "0.2.9"
+version := "0.2.91"
 
 scalaVersion := "2.12.1"
 
@@ -19,7 +19,8 @@ libraryDependencies ++= Seq(
   "org.slf4j" % "log4j-over-slf4j" % "1.7.25",
   "ch.qos.logback" % "logback-classic" % logbackVersion,
   ("com.typesafe.akka" %% "akka-stream" % akkaVersion).exclude("com.typesafe.akka", "actor"),
-  "org.julienrf" %% "reactivemongo-derived-codecs" % "2.1-SNAPSHOT"
+  "org.julienrf" %% "reactivemongo-derived-codecs" % "2.1-SNAPSHOT",
+  "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % Test
 )
 
 resolvers +=

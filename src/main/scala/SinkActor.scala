@@ -5,17 +5,19 @@ import akka.event.LoggingAdapter
 import com.bbvalabs.ai._
 
 import scalaz.concurrent.Task
-import scalaz.{-\/, Monoid, \/, \/-}
+import scalaz.{-\/, Monoid, Scalaz, \/, \/-}
+import scalaz.syntax.traverse.ToTraverseOps
+import scalaz.std.list.listInstance
 
 object SinkFunctions {
 
   /** Sink actor initialization **/
-  val ackMessage: String  = "ack"
+  val ackMessage: String = "ack"
   val initMessage: String = "start"
   val healthCheck: String = "heartbeat"
-  val notReady: String    = "notready"
-  val ready: String       = "ready"
-  val completeMessage     = "complete"
+  val notReady: String = "notready"
+  val ready: String = "ready"
+  val completeMessage = "complete"
 
   def getSinkCommonPartialFunction(s: ActorRef)(
       implicit log: LoggingAdapter): PartialFunction[Any, Unit] = {
@@ -27,10 +29,6 @@ object SinkFunctions {
     case `healthCheck` => {
       log.info(s"Heartbeat received. Responding to ${s}")
       s ! ready
-    }
-
-    case `completeMessage` => {
-
     }
 
     /** Error sent. Just log and ignore **/
@@ -62,35 +60,46 @@ object SinkFunctions {
 }
 
 import SinkFunctions._
+import Scalaz._
 
 /**
   * Created by e049627 on 5/6/17.
   */
 final class SinkActor[A <: Model, B <: DeltaType](
-    handler: SequenceHandler[A, B],
+    handler: List[SequenceHandler[A, B]],
     func: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
     ackref: ActorRef
-)(implicit val monoid: Monoid[Sequence[A, B]])
-    extends Actor
+) extends Actor
     with ActorLogging {
 
   implicit val ec = context.dispatcher
   implicit val logAd = log
-  var origin : Option[ActorRef] = None
-  /** Process will start as soon as database is ready **/
+  var origin: Option[ActorRef] = None
 
+  /** Process will start as soon as database is ready **/
   val partial = func andThen {
-    case (ngrps, list) =>
+    case (ngrps, list) => {
       origin = Some(sender())
+
       handler
-        .processBatchinOneModel(list, 0, Nil)
+        .traverse(_.processBatchinOneModel(list, 0, Nil))
         .unsafePerformAsync { result =>
-          val _result = checkTaskResultAndFlatten(result, self)
-          if (_result.isLeft) {
-            log.error(s"Error executing task ${_result.left}")
+          {
+            // Extract first sequencer parameters. It controls backpressure
+            result.map(_.head) match {
+              case -\/(err) => {
+                log.error(s"Error ${err}")
+                origin.get ! "ack"
+              }
+              case \/-(r) => {
+                val deltaList = r._1._2
+                r._2(deltaList.right)
+                ackref ! AckBox(ngrps, r._1._1, origin.get)
+              }
+            }
           }
-          ackref ! AckBox(ngrps, _result.getOrElse(0), origin.get)
         }
+    }
   }
 
   def receive: Receive = partial orElse _receive
@@ -121,29 +130,42 @@ final class SinkActor[A <: Model, B <: DeltaType](
   }
 }
 
-
 final class SinkActorRunner[A <: Model, B <: DeltaType](
-    handler: SequenceHandler[A, B],
+    handler: List[SequenceHandler[A, B]],
     func: PartialFunction[Any, (Int, List[(String, DeltaModel2[A, B])])],
     ackref: ActorRef
-)(implicit val monoid: Monoid[Sequence[A, B]])
-    extends Actor
+) extends Actor
     with ActorLogging {
 
   implicit val ec = context.dispatcher
   implicit val logAd = log
+
   /** Process will start as soon as database is ready **/
   val partial = func andThen {
     case (ngrps, list) =>
       var origin = sender()
       handler
-        .processBatchinOneModelTupled(list, 0, Nil)
-        .unsafePerformAsync { result =>
-          val _result = checkTaskResultAndFlatten(result, self)
-          if (_result.isLeft) {
-            log.error(s"Error executing task ${_result.left}")
+        .traverse(_.processBatchinOneModelTupled(list, 0, Nil))
+        .unsafePerformAsync { r =>
+          r match {
+            case -\/(err) => {
+              log.error(s"Error ${err}")
+            }
+            case \/-(list) => {
+              list match {
+                case ((n, l), f) :: t => {
+                  // First sequencer is master
+                  f(l.left)
+                  t.foreach {
+                    case ((i, e), f2) =>
+                      f2(e.left)
+                  }
+                  ackref ! AckBox(ngrps, n, origin)
+                }
+                case _ => // Do nothing!!
+              }
+            }
           }
-          ackref ! AckBox(ngrps, _result.getOrElse(0), origin)
         }
   }
 

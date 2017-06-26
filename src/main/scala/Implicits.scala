@@ -62,12 +62,6 @@ object Implicits {
     }
   }
 
-  implicit class modelMethods[A <: Model, B <: DeltaType](model: A) {
-    def ~>(idelta: B): DeltaModel2[A, B] = {
-      DeltaModel2(model, idelta)
-    }
-  }
-
   implicit class deltaConversions[A, B](in: (A, B)) {
     def liftToDelta: DeltaModel2[A, B] = DeltaModel2(in._1, in._2)
   }
@@ -79,7 +73,7 @@ object Implicits {
           case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
             AnySequence(
               nid,
-              f(nlist.head.model, olist.last.model).liftToDelta :: {
+              f(nlist.head.model, olist.head.model).liftToDelta :: {
                 if (olist.length == entries) olist.dropRight(1) else olist
               })
           }
@@ -99,11 +93,9 @@ object Implicits {
         (o, n) match {
           case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
             val omodel = olist.map(_.model)
-            AnySequence(
-              nid,
-              f(nlist.head.model, omodel).liftToDelta :: {
-                if (olist.length == entries) olist.dropRight(1) else olist
-              })
+            AnySequence(nid, f(nlist.head.model, omodel).liftToDelta :: {
+              if (olist.length == entries) olist.dropRight(1) else olist
+            })
           }
           case (NoSequence, seq) => {
             seq
@@ -120,6 +112,36 @@ object Implicits {
     def <<<~(f: A => String): String = {
       f(in.model)
     }
+  }
+
+
+  implicit def printDelta2[A <: Model, B <: DeltaType](
+      implicit mconverter: CSVConverter[A],
+      dconverter: CSVConverter[B],
+      f: A => String,
+      d: A => Option[A]
+  ) = {
+    (d2: (List[(String,DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]]) =>
+      d2 match {
+        case -\/(resdis) => {
+          val ids = resdis.map(_._1).head
+          val des = resdis.map(_._2)
+          val res = des.foldLeft("") { (acc, d) =>
+            val m = mconverter.to(d.model)
+            val de = dconverter.to(d.delta)
+            acc ++ s"${m}${de}"
+          }
+          println(s"${ids},${res.dropRight(1)}")
+        }
+        case \/-(resdis) => {
+          val res = resdis.foldLeft("") { (acc, d) =>
+            val m = mconverter.to(d.model)
+            val de = dconverter.to(d.delta)
+            acc ++ s"${m}${d}"
+          }
+          println(s"${res}")
+        }
+      }
   }
 
   implicit def printSequence[A <: Model, B <: DeltaType](
@@ -141,10 +163,12 @@ object Implicits {
                     val dlist = l.foldLeft("")((a, d2) => {
                       val d2p = d(d2.model)
                       val model = d2p match {
-                        case Some(d) =>
+                        case Some(d) => {
                           mconverter.to(d)
-                        case None =>
+                        }
+                        case None => {
                           mconverter.to(d2.model)
+                        }
                       }
                       val delta = dconverter.to(d2.delta)
                       a ++ s"${model + delta}"
@@ -152,7 +176,7 @@ object Implicits {
                     println(s"${k},${dlist.dropRight(1)}")
                   }
                 }
-                case _ =>  // Do nothing
+                case _ => // Do nothing
               }
             }
             case \/-(resdis) => {
@@ -187,6 +211,8 @@ object Implicits {
   implicit val s1 = derived.codec[Option[Double]]
   implicit val s2 = derived.codec[Option[String]]
   implicit val s3 = derived.codec[Option[Int]]
+  //implicit val s4 = derived.codec[Option[Float]]
+  implicit val s5 = derived.codec[Option[Long]]
 
   implicit def getDerivedCodecD2[A <: Model, B <: DeltaType](
       implicit inst1: BSONDocumentHandler[A],
@@ -198,11 +224,11 @@ object Implicits {
       inst2: BSONDocumentHandler[B]): BSONDocumentHandler[AnySequence[A, B]] =
     derived.codec[AnySequence[A, B]]
 
-
   implicit val as = ActorSystem("sequence-handler")
   implicit val ec = as.dispatcher
 
   trait CommonFilterAndLabel[A <: Model] {
+
     /**
       * This function drops the fields from the output. These fields must be Option
       * @param _new input object
@@ -215,12 +241,13 @@ object Implicits {
       * @param _new input object
       * @return the string which will be used as label
       */
-    def label(_new:A): String
+    def label(_new: A): String
     implicit def _ignore = ignore _
     implicit def _label = label _
   }
 
   trait SimpleDelta[A <: Model, B <: DeltaType] {
+
     /**
       * Function to create one delta from the last record in the sequence
       * @param _new new document
@@ -232,6 +259,7 @@ object Implicits {
   }
 
   trait Aggregate[A <: Model, B <: DeltaType] {
+
     /**
       * Function to create one ore more features from a stored sequence
       * @param _new
@@ -244,16 +272,15 @@ object Implicits {
   }
 
   trait WithOrdering[A <: Model, C] {
+
     /**
       * Function to create ascending order for input stream. In case of reading a bunch of data in training mode.
       * @param _new
-      * @tparam C
+      * @tparam
       * @return
       */
-    def sortBy(_new: A) : C
+    def sortBy(_new: A): C
     implicit def sort = sortBy _
   }
 
 }
-
-

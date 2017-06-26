@@ -6,6 +6,7 @@ import reactivemongo.bson.{BSONDocument, BSONDocumentHandler}
 
 import scalaz.concurrent.Task
 import reactivemongo.bson._
+import shapeless.Lens
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -17,20 +18,24 @@ import scala.concurrent.{ExecutionContext, Future}
   *  @date  17/03/2017
   */
 class Repository[A <: Model, B <: DeltaType](
-    implicit val lift: BSONDocumentHandler[AnySequence[A, B]], ec: ExecutionContext, model: String) {
+    implicit val lift: BSONDocumentHandler[AnySequence[A, B]],
+    ec: ExecutionContext,
+    model: String) {
 
   import delorean._
 
   val db = MongoConf.db
-  val collection : Future[BSONCollection] = db.map(_.collection(model))
+  val collection: Future[BSONCollection] = db.map(_.collection(model))
 
   /**
     * Finds a sequence in mongo by _id parameter
     * @param in model whose sequence is going to be changed.
     * @return the sequence if it exists otherwise NoSequence is returned.
     */
-  def find(in: A)(implicit col: BSONCollection) : Task[Sequence[A, B]] =
-    col.find(document("_id" -> in.id))
+  def find(in: A)(implicit col: BSONCollection, lens: Lens[A, String]): Task[Sequence[A, B]] =
+    col
+      //.find(document("_id" -> in.id))
+      .find(document("_id" -> lens.get(in)))
       .one[BSONDocument]
       .map(_ match {
         case Some(data) =>
@@ -45,10 +50,12 @@ class Repository[A <: Model, B <: DeltaType](
     * @param in New sequence to be inserted.
     * @return the new sequence.
     */
-  def save(in: AnySequence[A, B])(implicit col: BSONCollection): Task[Sequence[A, B]] = {
-    col.insert[BSONDocument](lift.write(in))
+  def save(in: AnySequence[A, B])(
+      implicit col: BSONCollection): Task[Sequence[A, B]] = {
+    col
+      .insert[BSONDocument](lift.write(in))
       .recover {
-        case e: Throwable => { NoSequence}
+        case e: Throwable => { NoSequence }
         case _ => NoSequence
       }
   }.toTask.map(_ => in)
@@ -59,9 +66,11 @@ class Repository[A <: Model, B <: DeltaType](
     * @param seq the new updated sequence
     * @return the updated sequence
     */
-  def update(in: A, seq: AnySequence[A, B])(implicit col: BSONCollection): Task[Sequence[A, B]] = {
-    val selector = document("_id" -> in.id)
-    val upd = col.update[BSONDocument, BSONDocument](selector, lift.write(seq))
+  def update(in: A, seq: AnySequence[A, B])(
+      implicit col: BSONCollection, lens: Lens[A, String]): Task[Sequence[A, B]] = {
+    val selector = document("_id" -> lens.get(in))
+    val upd = col
+      .update[BSONDocument, BSONDocument](selector, lift.write(seq))
       .recover {
         case e: Throwable => NoSequence
         case _ => NoSequence
