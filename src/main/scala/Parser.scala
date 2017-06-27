@@ -5,9 +5,11 @@ package com.bbvalabs.ai
   * Shapeless repository. Added type instance for Float.
   * TODO: In future DateTimes will be added.
   */
-import shapeless._, syntax.singleton._
+import shapeless._
+import syntax.singleton._
+
 import scala.collection.immutable.{:: => Cons}
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 /** Exception to throw if something goes wrong during CSV parsing */
 class CSVException(s: String) extends RuntimeException
@@ -17,6 +19,7 @@ trait CSVConverter[T] {
   def from(s: String): Try[T]
   def to(t: T): String
 }
+
 
 /** Instances of the CSVConverter trait */
 object CSVConverter {
@@ -152,6 +155,7 @@ object CSVConverter {
       }
 
       def to(ft: Option[V] :: T): String = {
+        println("to2 " + ft)
         ft.head.map(scv.value.to(_) ++ ",").getOrElse("") ++ sct.value.to(
           ft.tail)
       }

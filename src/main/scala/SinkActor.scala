@@ -68,7 +68,8 @@ import Scalaz._
 final class SinkActor[A <: Model, B <: DeltaType](
     handler: List[SequenceHandler[A, B]],
     func: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
-    ackref: ActorRef
+    ackref: ActorRef,
+    funcLabel: A => String
 ) extends Actor
     with ActorLogging {
 
@@ -133,7 +134,8 @@ final class SinkActor[A <: Model, B <: DeltaType](
 final class SinkActorRunner[A <: Model, B <: DeltaType](
     handler: List[SequenceHandler[A, B]],
     func: PartialFunction[Any, (Int, List[(String, DeltaModel2[A, B])])],
-    ackref: ActorRef
+    ackref: ActorRef,
+    funcLabel: A => String
 ) extends Actor
     with ActorLogging {
 
@@ -155,8 +157,8 @@ final class SinkActorRunner[A <: Model, B <: DeltaType](
               list match {
                 case ((n, l), f) :: t => {
                   // First sequencer is master
-                  f(l.left)
-                  t.foreach {
+                  val strMaster = f(l.left)
+                  val strTail = t.map {
                     case ((i, e), f2) =>
                       f2(e.left)
                   }

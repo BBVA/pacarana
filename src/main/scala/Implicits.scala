@@ -77,10 +77,8 @@ object Implicits {
                 if (olist.length == entries) olist.dropRight(1) else olist
               })
           }
-          case (NoSequence, seq) => {
+          case (NoSequence, seq) =>
             seq
-          }
-
           case _ => NoSequence
         }
       }
@@ -97,10 +95,54 @@ object Implicits {
               if (olist.length == entries) olist.dropRight(1) else olist
             })
           }
-          case (NoSequence, seq) => {
+          case (NoSequence, seq) =>
             seq
-          }
+          case _ => NoSequence
+        }
+      }
+    }
+  }
 
+  implicit class liftInMonoidForDelta2[A <: Model, B <: DeltaType](
+      f: ((A, B), (A, B)) => (A, B)) {
+    def lift: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
+      {
+        (o, n) match {
+          case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
+            AnySequence(
+              nid, {
+                (f((nlist.head.model, nlist.head.delta),
+                   (olist.head.model, olist.head.delta))).liftToDelta :: {
+                  if (olist.length == entries) olist.dropRight(1) else olist
+                }
+              }
+            )
+          }
+          case (NoSequence, seq) =>
+            seq
+          case _ => NoSequence
+        }
+      }
+    }
+  }
+
+  implicit class liftInMonoidForDelta2Agg[A <: Model, B <: DeltaType](
+      f: ((A, B), List[(A, B)]) => (A, B)) {
+    def lift: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
+      {
+        (o, n) match {
+          case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
+            AnySequence(
+              nid, {
+                (f((nlist.head.model, nlist.head.delta),
+                   olist.map(f => (f.model, f.delta)))).liftToDelta :: {
+                  if (olist.length == entries) olist.dropRight(1) else olist
+                }
+              }
+            )
+          }
+          case (NoSequence, seq) =>
+            seq
           case _ => NoSequence
         }
       }
@@ -115,35 +157,70 @@ object Implicits {
   }
 
 
-  implicit def printDelta2[A <: Model, B <: DeltaType](
+  //  (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]] => String)
+  implicit def printDelta[A <: Model, B <: DeltaType](
       implicit mconverter: CSVConverter[A],
       dconverter: CSVConverter[B],
-      f: A => String,
-      d: A => Option[A]
-  ) = {
-    (d2: (List[(String,DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]]) =>
+      ignoreFunc: Option[(A, B)] => Option[(A, B)]
+  ) : List[(String,DeltaModel2[A, B])] \/ List[DeltaModel2[A, B]] => String = {
+    // TODO: make this more generic. Avoid repeated code
+    (d2: (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]]) =>
       d2 match {
         case -\/(resdis) => {
           val ids = resdis.map(_._1).head
           val des = resdis.map(_._2)
           val res = des.foldLeft("") { (acc, d) =>
-            val m = mconverter.to(d.model)
-            val de = dconverter.to(d.delta)
-            acc ++ s"${m}${de}"
+            val tr0 = ignoreFunc(Some((d.model, d.delta)))
+            val tr = tr0 map (r => DeltaModel2(r._1, r._2))
+            val result = tr match {
+              case Some(v) => {
+                val m = mconverter.to(v.model)
+                val de = dconverter.to(v.delta)
+                acc ++ s"${m}${de}"
+              }
+              case None => {
+                val m = mconverter.to(d.model)
+                val de = dconverter.to(d.delta)
+                acc ++ s"${m}${de}"
+              }
+            }
+            result
           }
-          println(s"${ids},${res.dropRight(1)}")
+          val f1 = ids + "," + res.dropRight(1)
+          f1
         }
         case \/-(resdis) => {
           val res = resdis.foldLeft("") { (acc, d) =>
-            val m = mconverter.to(d.model)
-            val de = dconverter.to(d.delta)
-            acc ++ s"${m}${d}"
+            val tr0 = ignoreFunc(Some(d.model, d.delta))
+            val tr = tr0 map (r => DeltaModel2(r._1, r._2))
+            val result = tr match {
+              case Some(v) => {
+                val m = mconverter.to(v.model)
+                val de = dconverter.to(v.delta)
+                acc ++ s"${m}${de}"
+              }
+              case None => {
+                val m = mconverter.to(d.model)
+                val de = dconverter.to(d.delta)
+                acc ++ s"${m}${de}"
+              }
+            }
+            result
           }
-          println(s"${res}")
+          val f = s"${res}"
+          f
         }
       }
+      ""
   }
 
+  implicit class modelMethods[A <: Model, B <: DeltaType](model: A) {
+    def ~>(idelta: B): DeltaModel2[A, B] = {
+      DeltaModel2(model, idelta)
+    }
+  }
+
+  /*
   implicit def printSequence[A <: Model, B <: DeltaType](
       implicit mconverter: CSVConverter[A],
       dconverter: CSVConverter[B],
@@ -159,22 +236,22 @@ object Implicits {
               val m = resdis._2
               in match {
                 case AnySequence(_, l) => {
-                  if (l.length == entries) {
-                    val dlist = l.foldLeft("")((a, d2) => {
-                      val d2p = d(d2.model)
-                      val model = d2p match {
-                        case Some(d) => {
-                          mconverter.to(d)
-                        }
-                        case None => {
-                          mconverter.to(d2.model)
-                        }
+                  //if (l.length == entries) {
+                  val dlist = l.foldLeft("")((a, d2) => {
+                    val d2p = d(d2.model)
+                    val model = d2p match {
+                      case Some(d) => {
+                        mconverter.to(d)
                       }
-                      val delta = dconverter.to(d2.delta)
-                      a ++ s"${model + delta}"
-                    })
-                    println(s"${k},${dlist.dropRight(1)}")
-                  }
+                      case None => {
+                        mconverter.to(d2.model)
+                      }
+                    }
+                    val delta = dconverter.to(d2.delta)
+                    a ++ s"${model + delta}"
+                  })
+                  s"${k},${dlist.dropRight(1)}"
+                  //}
                 }
                 case _ => // Do nothing
               }
@@ -182,20 +259,20 @@ object Implicits {
             case \/-(resdis) => {
               in match {
                 case AnySequence(_, l) => {
-                  if (l.length == entries) {
-                    val dlist = l.foldLeft("")((a, d2) => {
-                      val d2p = d(d2.model)
-                      val model = d2p match {
-                        case Some(d) =>
-                          mconverter.to(d)
-                        case None =>
-                          mconverter.to(d2.model)
-                      }
-                      val delta = dconverter.to(d2.delta)
-                      a ++ s"${model + delta}"
-                    })
-                    println(s"${dlist}${f(resdis.model)}")
-                  }
+                  //if (l.length == entries) {
+                  val dlist = l.foldLeft("")((a, d2) => {
+                    val d2p = d(d2.model)
+                    val model = d2p match {
+                      case Some(d) =>
+                        mconverter.to(d)
+                      case None =>
+                        mconverter.to(d2.model)
+                    }
+                    val delta = dconverter.to(d2.delta)
+                    a ++ s"${model + delta}"
+                  })
+                  s"${dlist}${f(resdis.model)}"
+                  //}
                 }
                 case _ => // Do nothing
               }
@@ -203,7 +280,7 @@ object Implicits {
           }
         }
     }
-
+*/
   def group[A, K](list: List[A])(f: A => K): Map[K, List[A]] = {
     list.groupBy(f)
   }
@@ -227,23 +304,16 @@ object Implicits {
   implicit val as = ActorSystem("sequence-handler")
   implicit val ec = as.dispatcher
 
-  trait CommonFilterAndLabel[A <: Model] {
+  trait CommonFilterAndLabel[A <: Model, B <: DeltaType] {
 
     /**
       * This function drops the fields from the output. These fields must be Option
       * @param _new input object
       * @return one copy of the input object with the fields to None to drop fields
       */
-    def ignore(_new: A): Option[A]
+    def ignore(_new: (A, B)): Option[(A, B)]
 
-    /**
-      * Create the label from the new object. Result must be a string to append to the output sequence
-      * @param _new input object
-      * @return the string which will be used as label
-      */
-    def label(_new: A): String
     implicit def _ignore = ignore _
-    implicit def _label = label _
   }
 
   trait SimpleDelta[A <: Model, B <: DeltaType] {

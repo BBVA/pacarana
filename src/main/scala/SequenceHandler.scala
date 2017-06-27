@@ -49,11 +49,15 @@ object SequenceHandlerStreamTrainer {
       func: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
       cv: CSVConverter[A],
       ford: A => C,
-      ord: scala.Ordering[C]) = {
-
+      ord: scala.Ordering[C],
+      funcLabel: A => String) = {
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
-      Props.create(classOf[SinkActor[A, B]], seqHandler, func, taskSupervisor))
+      Props.create(classOf[SinkActor[A, B]],
+                   seqHandler,
+                   func,
+                   taskSupervisor,
+                   funcLabel))
     new StreamTrainer[A, B, C](sinkStream)
   }
 }
@@ -64,14 +68,16 @@ object SequenceHandlerStreamRunner {
       seqHandler: List[SequenceHandler[A, B]])(
       implicit as: ActorSystem,
       func: PartialFunction[Any, (Int, List[(String, DeltaModel2[A, B])])],
-      cv: CSVConverter[(String, A)]) = {
+      cv: CSVConverter[(String, A)],
+      funcLabel: A => String) = {
 
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
       Props.create(classOf[SinkActorRunner[A, B]],
                    seqHandler,
                    func,
-                   taskSupervisor))
+                   taskSupervisor,
+                   funcLabel))
     new StreamRunner[A, B](sinkStream)
   }
 }
@@ -83,11 +89,8 @@ object SequenceHandler {
       name: String,
       as: ActorSystem,
       _ec: ExecutionContext,
-      _io: (
-          (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]] => Unit)
-      /*_io: ((String, DeltaModel2[A, B]) \/ DeltaModel2[A, B]) => Sequence[
-        A,
-        B] => Unit*/,
+      _io:
+      (List[(String, DeltaModel2[A, B])] \/ List[DeltaModel2[A, B]]) => String,
       _lens: shapeless.Lens[A, String]
   ): Future[SequenceHandler[A, B]] = Future {
     new SequenceHandler[A, B] {
@@ -109,11 +112,8 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   implicit val col: BSONCollection
   implicit val ec: ExecutionContext
   implicit val monoid: Monoid[Sequence[A, B]]
-  /*implicit val io: (
-      (String, DeltaModel2[A, B]) \/ DeltaModel2[A, B]) => Sequence[A, B] => Unit
-   */
-  implicit val io: List[(String, DeltaModel2[A, B])] \/ List[
-    DeltaModel2[A, B]] => Unit
+  implicit val io: (List[(String, DeltaModel2[A, B])] \/ List[
+    DeltaModel2[A, B]]) => String
   implicit val lens: shapeless.Lens[A, String]
 
   val repo: Repository[A, B]
@@ -186,7 +186,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   def process(delta: DeltaModel2[A, B])(
       implicit lens: shapeless.Lens[A, String]): (Task[Sequence[A, B]]) = {
 
-    val c = for {
+    for {
       a <- liftT(delta.model)
       b <- get(delta.model)(repo)
       c <- {
@@ -204,7 +204,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
         }
       }
     } yield c
-    c
+
   }
 
   def processTupled(deltaT: (String, DeltaModel2[A, B]))(
@@ -213,7 +213,6 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
     //TODO: All is the same except io call
     val d = deltaT._2
     val k = deltaT._1
-
     val c = for {
       a <- liftT(d.model)
       b <- get(d.model)(repo)
@@ -274,7 +273,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
                              n: Int,
                              acc: List[DeltaModel2[A, B]]): Task[
     ((Int, List[DeltaModel2[A, B]]),
-     (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]] => Unit)] = {
+      (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]] => String)] = {
     list match {
       case h :: t => {
         process(h) flatMap { p =>
@@ -300,11 +299,11 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   }
 
   def processBatchinOneModelTupled(
-      list: List[(String, DeltaModel2[A, B])],
-      n: Int,
-      acc: List[(String, DeltaModel2[A, B])]): Task[
+                                    list: List[(String, DeltaModel2[A, B])],
+                                    n: Int,
+                                    acc: List[(String, DeltaModel2[A, B])]): Task[
     ((Int, List[(String, DeltaModel2[A, B])]),
-     (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]] => Unit)] = {
+      (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]] => String)] = {
     list match {
       case h :: t => {
         val (k, ta) = processTupled(h)
@@ -313,8 +312,8 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
             case AnySequence(id, deltas) => {
               val result =
                 processBatchinOneModelTupled(t,
-                                             n + 1,
-                                             deltas.map(l => (k, l)) ++ acc)
+                  n + 1,
+                  deltas.map(l => (k, l)) ++ acc)
               Task.suspend(result)
             }
             case NoSequence =>
@@ -325,41 +324,6 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
         }
       }
       case Nil => (Task { ((n, acc), io) })
-    }
-  }
-
-  /**
-    * This function will allow to introduce a IO monad to intoroduce in Task transformer
-    * @param map
-    * @param n
-    * @param acc
-    * @param f
-    * @param monoid
-    * @return
-    */
-  def processBatchInOneModeWithId(map: List[(String, DeltaModel2[A, B])],
-                                  n: Int,
-                                  acc: List[DeltaModel2[A, B]],
-                                  f: (String => Sequence[A, B] => Unit))(
-      implicit monoid: Monoid[Sequence[A, B]])
-    : (Task[(Int, List[DeltaModel2[A, B]])]) = {
-    map match {
-      case h :: t =>
-        h match {
-          case (k, e) =>
-            processWithIO(e)(f(k)) flatMap {
-              case AnySequence(id, deltas) => {
-                val seq =
-                  processBatchInOneModeWithId(t, n + 1, deltas ++ acc, f)
-                Task.suspend(seq)
-              }
-              case NoSequence =>
-                Task {
-                  (n, acc)
-                }
-            }
-        }
-      case Nil => Task { (n, acc) }
     }
   }
 }
