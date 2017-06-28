@@ -82,20 +82,39 @@ final class SinkActor[A <: Model, B <: DeltaType](
     case (ngrps, list) => {
       origin = Some(sender())
 
+      //TODO: Extract
       handler
         .traverse(_.processBatchinOneModel(list, 0, Nil))
-        .unsafePerformAsync { result =>
-          {
-            // Extract first sequencer parameters. It controls backpressure
-            result.map(_.head) match {
-              case -\/(err) => {
-                log.error(s"Error ${err}")
-                origin.get ! "ack"
-              }
-              case \/-(r) => {
-                val deltaList = r._1._2
-                r._2(deltaList.right)
-                ackref ! AckBox(ngrps, r._1._1, origin.get)
+        .unsafePerformAsync { r =>
+          r match {
+            case -\/(err) => {
+              log.error(s"Error ${err}")
+            }
+            case \/-(list) => {
+              list match {
+                case ((n, l), f) :: t => {
+                  // First sequencer is master
+                  val masterModel = l.head.model
+                  val strMaster = f(l.right)
+                  val strTail = t.map {
+                    case ((i, e), f2) =>
+                      f2(e.right)
+                  }
+
+                  val toPrint = {
+                    if(strTail.isEmpty) {
+                      s"${strMaster},${funcLabel(masterModel)}"
+                    }
+                    else {
+                      val tr = s"${strMaster},${strTail.foldLeft("")((a, acc) => s"${a}" ++ s"${acc}")},${funcLabel(masterModel)}"
+                      tr
+                    }
+                  }
+
+                  println(toPrint)
+                  ackref ! AckBox(ngrps, n, origin.get)
+                }
+                case _ => // Do nothing!!
               }
             }
           }
@@ -160,8 +179,18 @@ final class SinkActorRunner[A <: Model, B <: DeltaType](
                   val strMaster = f(l.left)
                   val strTail = t.map {
                     case ((i, e), f2) =>
-                      f2(e.left)
+                      f2(e.map(_._2).right)
                   }
+
+                  val toPrint = {
+                    if(strTail.isEmpty)
+                      s"${strMaster}"
+                    else {
+                      s"${strMaster},${strTail.foldLeft("")((a, acc) => a ++ acc)}"
+                    }
+                  }
+
+                  println(toPrint)
                   ackref ! AckBox(ngrps, n, origin)
                 }
                 case _ => // Do nothing!!
