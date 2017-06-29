@@ -63,22 +63,9 @@ object StreamOps {
       }
     }
   }
-
-  def checkTaskResultAndFlatten[A <: Model, B <: DeltaType](
-      result: Throwable \/ (Int, List[DeltaModel2[A, B]]),
-      ref: ActorRef): Either[String, Int] = {
-    result match {
-      case -\/(err) => {
-        Left(err.getMessage)
-      }
-      case \/-((a, deltas)) => {
-        Right(a)
-      }
-    }
-  }
 }
 
-final class StreamTrainer[A <: Model, B <: DeltaType, C](
+final class StreamTrainer[A <: Model, C](
     sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[A], ford: A => C, ord: Ordering[C]) {
 
   import StreamOps._
@@ -117,7 +104,7 @@ final class StreamTrainer[A <: Model, B <: DeltaType, C](
   )
 }
 
-final class StreamRunner[A <: Model, B <: DeltaType](sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[(String, A)]) {
+final class StreamRunner[A <: Model](sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[(String, A)]) {
   import StreamOps._
   import Settings._
 

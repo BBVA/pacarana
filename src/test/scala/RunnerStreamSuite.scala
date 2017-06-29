@@ -5,7 +5,7 @@ import akka.actor.ActorSystem
 import akka.stream.{Graph, SourceShape}
 import akka.stream.scaladsl.Source
 import akka.testkit.TestKit
-import com.bbvalabs.ai.Implicits.{CommonFilterAndLabel, SimpleDelta, WithOrdering}
+import com.bbvalabs.ai.Implicits.{SimpleDelta, WithOrdering}
 import com.bbvalabs.ai.{Model, MongoEmbedDatabase}
 
 /**

@@ -4,11 +4,13 @@ import akka.actor.{Actor, ActorLogging, ActorRef}
 import akka.event.LoggingAdapter
 import com.bbvalabs.ai._
 
-import scalaz.concurrent.Task
-import scalaz.{-\/, Monoid, Scalaz, \/, \/-}
+import scalaz.{-\/, Scalaz, \/, \/-}
 import scalaz.syntax.traverse.ToTraverseOps
 import scalaz.std.list.listInstance
 
+/**
+  *  TODO: Try to include this partial function in actors body. There were errors with sender property
+ */
 object SinkFunctions {
 
   /** Sink actor initialization **/
@@ -38,22 +40,7 @@ object SinkFunctions {
     }
   }
 
-  def checkTaskResultAndFlatten[A <: Model, B <: DeltaType](
-      result: Throwable \/ (Int, List[DeltaModel2[A, B]]),
-      ref: ActorRef)(implicit log: LoggingAdapter): Either[String, Int] = {
-    val proc = result match {
-      case -\/(err) => {
-        log.error(s"Error ${err}")
-        Left(err.getMessage)
-      }
-      case \/-((a, deltas)) => {
-        log.info(s"delta number ${deltas.size} for id ${deltas.head.model.id}")
-        Right(a)
-      }
-    }
-    proc
-  }
-
+  // TODO: this function should group by a composed key to prevent document collisions
   def group[A, K](list: List[A])(f: A => K): Map[K, List[A]] = {
     list.groupBy(f)
   }
@@ -62,12 +49,9 @@ object SinkFunctions {
 import SinkFunctions._
 import Scalaz._
 
-/**
-  * Created by e049627 on 5/6/17.
-  */
-final class SinkActor[A <: Model, B <: DeltaType](
-    handler: List[SequenceHandler[A, B]],
-    func: PartialFunction[Any, (Int, List[DeltaModel2[A, B]])],
+final class SinkActor[A <: Model](
+    handler: List[SequenceHandler[A, _]],
+    func: PartialFunction[Any, (Int, List[A])],
     ackref: ActorRef,
     funcLabel: A => String
 ) extends Actor
@@ -81,7 +65,6 @@ final class SinkActor[A <: Model, B <: DeltaType](
   val partial = func andThen {
     case (ngrps, list) => {
       origin = Some(sender())
-
       //TODO: Extract
       handler
         .traverse(_.processBatchinOneModel(list, 0, Nil))
@@ -93,28 +76,37 @@ final class SinkActor[A <: Model, B <: DeltaType](
             case \/-(list) => {
               list match {
                 case ((n, l), f) :: t => {
-                  // First sequencer is master
-                  val masterModel = l.head.model
-                  val strMaster = f(l.right)
-                  val strTail = t.map {
-                    case ((i, e), f2) =>
-                      f2(e.right)
-                  }
-
-                  val toPrint = {
-                    if(strTail.isEmpty) {
-                      s"${strMaster},${funcLabel(masterModel)}"
+                  if (!l.isEmpty) {
+                    // TODO: Check why should the first sequencer be treated in a different way
+                    if (l.size == Settings.entries) {
+                      val masterModel = l.head.model
+                      //if(masterModel.)
+                      val strMaster = f(l.right)
+                      val strTail = t.map {
+                        case ((i, e), f2) =>
+                          f2(e.right)
+                      }
+                      val toPrint = {
+                        if (strTail.isEmpty) {
+                          s"${strMaster},${funcLabel(masterModel)}"
+                        } else {
+                          val tr =
+                            s"${strMaster},${strTail.foldLeft("")((a, acc) =>
+                              s"${a}" ++ s"${acc}")},${funcLabel(masterModel)}"
+                          tr
+                        }
+                      }
+                      // TODO: make this more generic !!
+                      println(toPrint)
                     }
-                    else {
-                      val tr = s"${strMaster},${strTail.foldLeft("")((a, acc) => s"${a}" ++ s"${acc}")},${funcLabel(masterModel)}"
-                      tr
-                    }
+                    ackref ! AckBox(ngrps, n, origin.get)
+                  } else {
+                    // TODO: In case of input error a valid message is received. Change it in shapeless decoder to throw one exception
+                    log.warning("Invalid message. Requesting more elements")
+                    origin.get ! "ack"
                   }
-
-                  println(toPrint)
-                  ackref ! AckBox(ngrps, n, origin.get)
                 }
-                case _ => // Do nothing!!
+                case _ => println("DO NOting")
               }
             }
           }
@@ -150,9 +142,9 @@ final class SinkActor[A <: Model, B <: DeltaType](
   }
 }
 
-final class SinkActorRunner[A <: Model, B <: DeltaType](
-    handler: List[SequenceHandler[A, B]],
-    func: PartialFunction[Any, (Int, List[(String, DeltaModel2[A, B])])],
+final class SinkActorRunner[A <: Model](
+    handler: List[SequenceHandler[A, _]],
+    func: PartialFunction[Any, (Int, List[(String, A)])],
     ackref: ActorRef,
     funcLabel: A => String
 ) extends Actor
@@ -175,23 +167,27 @@ final class SinkActorRunner[A <: Model, B <: DeltaType](
             case \/-(list) => {
               list match {
                 case ((n, l), f) :: t => {
-                  // First sequencer is master
-                  val strMaster = f(l.left)
-                  val strTail = t.map {
-                    case ((i, e), f2) =>
-                      f2(e.map(_._2).right)
-                  }
-
-                  val toPrint = {
-                    if(strTail.isEmpty)
-                      s"${strMaster}"
-                    else {
-                      s"${strMaster},${strTail.foldLeft("")((a, acc) => a ++ acc)}"
+                  if (!l.isEmpty) {
+                    if (l.size == Settings.entries) {
+                      val strMaster = f(l.left)
+                      val strTail = t.map {
+                        case ((i, e), f2) =>
+                          f2(e.map(_._2).right)
+                      }
+                      val toPrint = {
+                        if (strTail.isEmpty)
+                          s"${strMaster}"
+                        else {
+                          s"${strMaster},${strTail.foldLeft("")((a, acc) => a ++ acc)}"
+                        }
+                      }
+                      println(toPrint)
                     }
+                    ackref ! AckBox(ngrps, n, origin)
+                  } else {
+                    log.warning("Invalid message. Requesting more elements")
+                    origin ! "ack"
                   }
-
-                  println(toPrint)
-                  ackref ! AckBox(ngrps, n, origin)
                 }
                 case _ => // Do nothing!!
               }

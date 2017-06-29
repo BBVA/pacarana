@@ -2,8 +2,9 @@ package com.bbvalabs.ai
 
 import scala.util.Try
 
-object Sequencer {
-  type OpReturn = Try[Boolean]
+object SequencerTypes {
+  type DataForTrain[A] = (Int, List[A])
+  type DataForRun[A] = (Int, List[(String, A)])
 }
 
 sealed trait Sequence[+A, +B]
@@ -16,8 +17,8 @@ object Sequence {
   def unit[A, B] = AnySequence("", Nil)
 }
 
-case class DeltaModel2[+A, +B](model: A, delta: B)
 
+case class DeltaModel2[+A, +B](model: A, delta: B)
 
 object DeltaModel2 {
   def apply[A](m: A) : DeltaModel2[A, _ <: DeltaType] = DeltaModel2(m, DeltaType.unit)
