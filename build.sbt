@@ -1,6 +1,6 @@
 name := "sequence-handler-core"
 
-version := "0.2.91"
+version := "0.3.0"
 
 scalaVersion := "2.12.1"
 
@@ -33,8 +33,6 @@ publishTo := {
   else
     Some("releases"  at nexus + "releases/")
 }
-
-unmanagedJars in Compile += file("lib/reactivemongo-derived-codecs-assembly-2.1-SNAPSHOT.jar")
 
 artifact in (Compile, assembly) := {
   val art = (artifact in (Compile, assembly)).value

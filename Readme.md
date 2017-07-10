@@ -330,3 +330,22 @@ object TrainTwoSeq extends App {
 **IMPORTANT**
 
 If you deal with parallel sequences the **groupedBy** should be 1 to avoid conflicts in the repo.
+Any change regarding the datatypes or WINDOW_SIZE should applied to a different model name otherwise errors could happen in the sequence process.
+
+**Creating your project**
+
+Create a new **SBT** project with a build.sbt file:
+
+```scala
+name := "myexperiment"
+
+version := "1.0"
+
+scalaVersion := "2.12.2"
+
+resolvers ++=
+  Seq("Artifactory Sequence Handler" at "http://artifactory.default.svc.cluster.local:8081/artifactory/ml/sequence-handler-core/releases",
+      "Artifactory Derived Codecs" at "http://artifactory.default.svc.cluster.local:8081/artifactory/ml/reactive-mongo-derived/snapshots")
+
+libraryDependencies ++= Seq("com.bbvalabs" %% "sequence-handler-core" % "0.3.0")
+```
