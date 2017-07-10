@@ -17,7 +17,6 @@ object MongoConf {
 
   val mongoUri: String = mongo.getString("uri")
   val mongoDb: String = mongo.getString("db")
-  val mongoCol: String = mongo.getString("collection")
 
   lazy val driver = new MongoDriver
 

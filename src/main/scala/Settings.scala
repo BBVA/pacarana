@@ -12,6 +12,5 @@ object Settings {
   val entries: Int = aggregator.getInt("entries")
   val grouped: Int = aggregator.getInt("groupedBy")
   val milliss: Int = aggregator.getInt("milliseconds")
-  val model = aggregator.getString("model")
 
 }

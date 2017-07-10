@@ -44,12 +44,12 @@ import scala.concurrent.duration._
   *  @review 26/04/2017 Transform Sequence handler to Future sh
   */
 object SequenceHandlerStreamTrainer {
-  def apply[A <: Model, C](
-      seqHandler: List[SequenceHandler[A, _]])(implicit as: ActorSystem,
-                                               cv: CSVConverter[A],
-                                               ford: A => C,
-                                               ord: scala.Ordering[C],
-                                               funcLabel: A => String) = {
+  def apply[A <: Model, C](seqHandler: List[SequenceHandler[A, _]])(
+      implicit as: ActorSystem,
+      cv: CSVConverter[A],
+      ford: A => C,
+      ord: scala.Ordering[C],
+      funcLabel: A => String) = {
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
       Props.create(classOf[SinkActor[A]],
@@ -63,18 +63,16 @@ object SequenceHandlerStreamTrainer {
 
 // TODO: Check if it is possible common factor
 object SequenceHandlerStreamRunner {
-  def apply[A <: Model](
-      seqHandler: List[SequenceHandler[A, _]])(implicit as: ActorSystem,
-                                               cv: CSVConverter[(String, A)],
-                                               funcLabel: A => String) = {
+  def apply[A <: Model](seqHandler: List[SequenceHandler[A, _]])(
+      implicit as: ActorSystem,
+      cv: CSVConverter[(String, A)]) = {
 
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
       Props.create(classOf[SinkActorRunner[A]],
                    seqHandler,
                    Implicits.partialfuncRunner,
-                   taskSupervisor,
-                   funcLabel))
+                   taskSupervisor))
     new StreamRunner[A](sinkStream)
   }
 }
@@ -194,7 +192,6 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
             updateSequence(delta.model, seq)(repo)
           }
           case NoSequence => {
-            // TODO: Delete this !!!
             monoid.append(b, AnySequence(lens.get(delta.model), delta :: Nil))
             val seq = AnySequence(lens.get(delta.model), delta :: Nil)
             insertSequence(seq)(repo)
@@ -220,7 +217,6 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
             updateSequence(d.model, seq)(repo)
           }
           case NoSequence => {
-            // TODO: Delete this !!!
             monoid.append(b, AnySequence(lens.get(d.model), d :: Nil))
             val seq = AnySequence(lens.get(d.model), d :: Nil)
             insertSequence(seq)(repo)

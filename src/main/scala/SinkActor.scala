@@ -10,7 +10,7 @@ import scalaz.std.list.listInstance
 
 /**
   *  TODO: Try to include this partial function in actors body. There were errors with sender property
- */
+  */
 object SinkFunctions {
 
   /** Sink actor initialization **/
@@ -75,7 +75,7 @@ final class SinkActor[A <: Model](
             }
             case \/-(list) => {
               list match {
-                case ((n, l), f) :: t => {
+                case ((n, l), f) :: t =>
                   if (!l.isEmpty) {
                     // TODO: Check why should the first sequencer be treated in a different way
                     if (l.size == Settings.entries) {
@@ -87,14 +87,11 @@ final class SinkActor[A <: Model](
                           f2(e.right)
                       }
                       val toPrint = {
-                        if (strTail.isEmpty) {
+                        if (strTail.isEmpty)
                           s"${strMaster},${funcLabel(masterModel)}"
-                        } else {
-                          val tr =
-                            s"${strMaster},${strTail.foldLeft("")((a, acc) =>
-                              s"${a}" ++ s"${acc}")},${funcLabel(masterModel)}"
-                          tr
-                        }
+                        else
+                          s"${strMaster},${strTail.foldLeft("")((a, acc) =>
+                            s"${a}" ++ s"${acc}")},${funcLabel(masterModel)}"
                       }
                       // TODO: make this more generic !!
                       println(toPrint)
@@ -105,8 +102,7 @@ final class SinkActor[A <: Model](
                     log.warning("Invalid message. Requesting more elements")
                     origin.get ! "ack"
                   }
-                }
-                case _ => println("DO NOting")
+                case _ => println("DO Nothing")
               }
             }
           }
@@ -145,8 +141,7 @@ final class SinkActor[A <: Model](
 final class SinkActorRunner[A <: Model](
     handler: List[SequenceHandler[A, _]],
     func: PartialFunction[Any, (Int, List[(String, A)])],
-    ackref: ActorRef,
-    funcLabel: A => String
+    ackref: ActorRef
 ) extends Actor
     with ActorLogging {
 
@@ -164,7 +159,7 @@ final class SinkActorRunner[A <: Model](
             case -\/(err) => {
               log.error(s"Error ${err}")
             }
-            case \/-(list) => {
+            case \/-(list) =>
               list match {
                 case ((n, l), f) :: t => {
                   if (!l.isEmpty) {
@@ -191,7 +186,6 @@ final class SinkActorRunner[A <: Model](
                 }
                 case _ => // Do nothing!!
               }
-            }
           }
         }
   }

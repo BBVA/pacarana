@@ -70,6 +70,14 @@ object CSVConverter {
       def to(i: Double): String = i.toString
     }
 
+  // Add support for Long type
+  implicit def longCsvConverter: CSVConverter[Long] =
+    new CSVConverter[Long] {
+      def from(s: String): Try[Long] = Try(s.toLong)
+
+      def to(i: Long): String = i.toString
+    }
+
   def listCsvLinesConverter[A](l: List[String])(
       implicit ec: CSVConverter[A]): Try[List[A]] = l match {
     case Nil => Success(Nil)

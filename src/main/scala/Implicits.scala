@@ -46,17 +46,21 @@ object Implicits {
 
   def partialfuncRunner[A <: Model]: PartialFunction[Any, DataForRun[A]] = {
     case models: InputMsgsRunner[_] => {
-      val m = models.list.map(_._2)
-      val id = models.list.map(_._1).head
-      val g = group(m)(_.id)
-      val s = g.size
-      val q = g.toList.flatMap { l =>
-        val s1 = l._2
-        s1.map(m => (id, m))
+      if(!models.list.isEmpty) {
+        val m = models.list.map(_._2)
+        val id = models.list.map(_._1).head
+        val g = group(m)(_.id)
+        val s = g.size
+        val q = g.toList.flatMap { l =>
+          val s1 = l._2
+          s1.map(m => (id, m))
+        }
+        // INFO: There is nothing wrong with this. It is include to avoid type erasure warning compiler.
+        // TODO: Try to figure out a better choice
+        (s, q.asInstanceOf[List[(String, A)]])
+      }else {
+        (0, Nil)
       }
-      // INFO: There is nothing wrong with this. It is include to avoid type erasure warning compiler.
-      // TODO: Try to figure out a better choice
-      (s, q.asInstanceOf[List[(String, A)]])
     }
   }
 
@@ -218,13 +222,13 @@ object Implicits {
     implicit def _append = append2 _ lift
   }
 
-  trait FullDelta[A <: Model, B <: DeltaType] {
+  trait SimpleAppend[A <: Model, B <: DeltaType] {
     def fullAppend(_newTuple: (A, B), lastTuple: (A, B)): (A, B)
     implicit def _fullDelta = fullAppend _ lift
   }
 
-  trait FullAggregate[A <: Model, B <: DeltaType] {
-    def fullAppend2(_newTuple: (A, B), storedSequence: List[(A, B)]): (A, B)
+  trait SimpleAppendWithSerie[A <: Model, B <: DeltaType] {
+    def fullAppend2(_newTuple: (A, B), storedSerie: List[(A, B)]): (A, B)
     implicit def _fullAppend2 = fullAppend2 _ lift
   }
 
