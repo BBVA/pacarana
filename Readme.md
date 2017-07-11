@@ -121,8 +121,8 @@ The **Output** trait contains the abstract method **output** to convert the resu
 
 # Full Sample
 
-// Codecs that will be created in compilation phase for CSV converter and MongoDB serializers
 ```scala
+// Codecs that will be created in compilation phase for CSV converter and MongoDB serializers
 object implicits {
   implicit val tran1 =  CSVConverter[Transaction]
   implicit val codec1 = derived.codec[Transaction]
@@ -216,15 +216,15 @@ object TrainOneSeq extends App {
 
 Once the stream is created it reads from the **Stdin**. For example if the incoming events are:
 
-9992929,1000,1000,0.4456,0.2333,200,1.0
-9992929,1001,1001,0.4456,0.2333,200,1.0
-9992929,1001,1001,0.4456,0.2333,200,0.0
+9992929,1000,1000,0.4456,0.2333,200,1.0<br/>
+9992929,1001,1001,0.4456,0.2333,200,1.0<br/>
+9992929,1001,1001,0.4456,0.2333,200,0.0<br/>
 
 in our example the output would be:
 
-1000.0,200,0.0,0.0,0.0,1.0
-1001.0,200,1.0,0.0,1.0,1.0
-1001.0,200,0.0,0.0,0.0,0.0
+1000.0,200,0.0,0.0,0.0,1.0<br/>
+1001.0,200,1.0,0.0,1.0,1.0<br/>
+1001.0,200,0.0,0.0,0.0,0.0<br/>
 
 
 # Starting the stream in running mode
@@ -290,8 +290,8 @@ aggregator {
 
 The **entries** parameter allows to print series of events. For example, if this field is set with 2 the output would be:
 
-Input: 9992929,1000,1000,0.4456,0.2333,200,1.0
-output: 1000.0,200,0.0,0.0,0.0,1000.0,200,0.0,0.0,0.0,1.0
+Input: 9992929,1000,1000,0.4456,0.2333,200,1.0<br/>
+output: 1000.0,200,0.0,0.0,0.0,1000.0,200,0.0,0.0,0.0,1.0<br/>
 
 For a value of 5
 
