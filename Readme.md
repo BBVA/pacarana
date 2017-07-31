@@ -95,7 +95,7 @@ object sq
     {
 
       def fullAppend(_newTransaction: (Transaction, TemporalFeaturesByCard),
-                     lastTransaction: (Transaction, SimpleAppend))
+                     lastTransaction: (Transaction, TemporalFeaturesByCard))
         : (Transaction, TemporalFeaturesByCard) = {
         (_newTransaction, lastTransaction) match {
           case ((newModel, newDelta), (lastModel, lastDelta)) => {
