@@ -3,8 +3,8 @@ package com.bbvalabs.ai
 import scala.util.Try
 
 object SequencerTypes {
-  type DataForTrain[A] = (Int, List[A])
-  type DataForRun[A] = (Int, List[(String, A)])
+  type DataForTrain[A] = List[(Int, List[A])]
+  type DataForRun[A] = List[(Int, List[(String, A)])]
 }
 
 sealed trait Sequence[+A, +B]

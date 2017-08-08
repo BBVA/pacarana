@@ -264,8 +264,8 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
     */
   def processBatchinOneModel(list: List[A],
                              n: Int,
-                             acc: List[DeltaModel2[A, B]]): Task[
-    ((Int, List[DeltaModel2[A, B]]),
+                             acc: List[List[DeltaModel2[A, B]]]): Task[
+    ((Int, List[List[DeltaModel2[A, B]]]),
      (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]] => String)] = {
     val l = list.map(i => DeltaModel2(i, initDelta))
     l match {
@@ -275,7 +275,9 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
             case AnySequence(id, deltas) => {
               val listmodel = t.map(_.model)
               val result =
-                processBatchinOneModel(t.map(_.model), n + 1, deltas ++ acc)
+                processBatchinOneModel(t.map(_.model),
+                                       n + 1,
+                                       acc ++ List(deltas))
               Task.suspend(result)
             }
             case NoSequence =>
@@ -286,9 +288,9 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
         }
       }
       case Nil => {
-        val nilTask = (Task {
+        val nilTask = Task {
           ((n, acc), io)
-        })
+        }
         nilTask
       }
     }
@@ -297,8 +299,8 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   def processBatchinOneModelTupled(
       list: List[(String, A)],
       n: Int,
-      acc: List[(String, DeltaModel2[A, B])]): Task[
-    ((Int, List[(String, DeltaModel2[A, B])]),
+      acc: List[List[(String, DeltaModel2[A, B])]]): Task[
+    ((Int, List[List[(String, DeltaModel2[A, B])]]),
      (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]] => String)] = {
 
     val l = list.map(i => (i._1, DeltaModel2(i._2, initDelta)))
@@ -310,9 +312,10 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
           p match {
             case AnySequence(id, deltas) => {
               val result =
-                processBatchinOneModelTupled(t.map(i => (i._1, i._2.model)),
-                                             n + 1,
-                                             deltas.map(l => (k, l)) ++ acc)
+                processBatchinOneModelTupled(
+                  t.map(i => (i._1, i._2.model)),
+                  n + 1,
+                  acc ++ List(deltas.map(l => (k, l))))
               Task.suspend(result)
             }
             case NoSequence =>

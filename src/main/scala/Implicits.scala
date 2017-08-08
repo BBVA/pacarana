@@ -34,32 +34,33 @@ object Implicits {
     case models: InputMsgs[_] => {
       val g = group(models.list)(_.id)
       val s = g.size
-      val q = g.toList.flatMap { l =>
-        l._2
-      }
+
+      val twodimension = g.mapValues((s, _))
+      val mapValues = twodimension.values.toList
+
       // INFO: There is nothing wrong with this. It is include to avoid type erasure warning compiler.
+      // Change because error in batch input size
       // Emiliano Martinez. 16/06/2017
       // TODO: Try to figure out a better choice
-      (s, q.asInstanceOf[List[A]])
+      mapValues.map(j => (j._1, j._2.asInstanceOf[List[A]]))
     }
   }
 
   def partialfuncRunner[A <: Model]: PartialFunction[Any, DataForRun[A]] = {
     case models: InputMsgsRunner[_] => {
       if(!models.list.isEmpty) {
-        val m = models.list.map(_._2)
-        val id = models.list.map(_._1).head
-        val g = group(m)(_.id)
+        val g = group(models.list)(_._2.id)
         val s = g.size
-        val q = g.toList.flatMap { l =>
-          val s1 = l._2
-          s1.map(m => (id, m))
-        }
+
+        val twodimension = g.mapValues((s, _))
+        val mapValues = twodimension.values.toList
+
         // INFO: There is nothing wrong with this. It is include to avoid type erasure warning compiler.
         // TODO: Try to figure out a better choice
-        (s, q.asInstanceOf[List[(String, A)]])
+        //(s, q.asInstanceOf[List[(String, A)]])
+        mapValues.map(j => (j._1, j._2.map(e => (e._1, e._2.asInstanceOf[A]))))
       }else {
-        (0, Nil)
+        Nil
       }
     }
   }

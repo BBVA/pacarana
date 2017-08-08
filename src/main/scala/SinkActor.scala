@@ -2,6 +2,7 @@ package com.bbvalabs.ai.runtime
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import akka.event.LoggingAdapter
+import com.bbvalabs.ai.SequencerTypes.{DataForRun, DataForTrain}
 import com.bbvalabs.ai._
 
 import scalaz.{-\/, Scalaz, \/, \/-}
@@ -51,7 +52,7 @@ import Scalaz._
 
 final class SinkActor[A <: Model](
     handler: List[SequenceHandler[A, _]],
-    func: PartialFunction[Any, (Int, List[A])],
+    func: PartialFunction[Any, DataForTrain[A]],
     ackref: ActorRef,
     funcLabel: A => String
 ) extends Actor
@@ -63,50 +64,62 @@ final class SinkActor[A <: Model](
 
   /** Process will start as soon as database is ready **/
   val partial = func andThen {
-    case (ngrps, list) => {
+    case list => {
       origin = Some(sender())
-      //TODO: Extract
-      handler
-        .traverse(_.processBatchinOneModel(list, 0, Nil))
-        .unsafePerformAsync { r =>
-          r match {
-            case -\/(err) => {
-              log.error(s"Error ${err}")
-            }
-            case \/-(list) => {
-              list match {
-                case ((n, l), f) :: t =>
-                  if (!l.isEmpty) {
-                    // TODO: Check why should the first sequencer be treated in a different way
-                    if (l.size == Settings.entries) {
-                      val masterModel = l.head.model
-                      //if(masterModel.)
-                      val strMaster = f(l.right)
-                      val strTail = t.map {
-                        case ((i, e), f2) =>
-                          f2(e.right)
+      val result = list foreach {
+        case (ngrps, list) =>
+          handler
+            .traverse(_.processBatchinOneModel(list, 0, Nil))
+            .unsafePerformAsync { r =>
+              r match {
+                case -\/(err) => {
+                  log.error(s"Error ${err}")
+                }
+                case \/-(list) => {
+                  list match {
+                    case ((n, l), f) :: t =>
+                      if (!l.isEmpty) {
+                        l.foreach { l1 =>
+                          /** l1 corresponds to th lenfht of each Delta list lenght **/
+                          if (l1.size == Settings.entries) {
+                            val strMaster = f(l1.right)
+                            /* master model for label when window > 1 */
+                            val masterModel = l1.head.model
+                            val strTail = t.map {
+                              case ((i, e), f2) => {
+                                if (e.size == Settings.entries) {
+                                  e.map(r => f2(r.right))
+                                } else ""
+                              }
+                            }
+
+                            /** to print to concatenate print from head and tail **/
+                            val toPrint = {
+                              if (strTail.isEmpty)
+                                s"${strMaster},${funcLabel(masterModel)}"
+                              else
+                                s"${strMaster},${strTail.foldLeft("")((a, acc) =>
+                                  s"${a}" ++ "\n" ++ s"${acc}")},${funcLabel(masterModel)}"
+                            }
+
+                            // TODO: make this more generic !!
+                            println(toPrint)
+                          }
+                          ackref ! AckBox(ngrps, n, origin.get)
+                        }
+
+                      } else {
+                        // TODO: In case of input error a valid message is received. Change it in shapeless decoder to throw one exception
+                        log.warning(
+                          "Invalid message. Requesting more elements")
+                        origin.get ! "ack"
                       }
-                      val toPrint = {
-                        if (strTail.isEmpty)
-                          s"${strMaster},${funcLabel(masterModel)}"
-                        else
-                          s"${strMaster},${strTail.foldLeft("")((a, acc) =>
-                            s"${a}" ++ s"${acc}")},${funcLabel(masterModel)}"
-                      }
-                      // TODO: make this more generic !!
-                      println(toPrint)
-                    }
-                    ackref ! AckBox(ngrps, n, origin.get)
-                  } else {
-                    // TODO: In case of input error a valid message is received. Change it in shapeless decoder to throw one exception
-                    log.warning("Invalid message. Requesting more elements")
-                    origin.get ! "ack"
+                    case _ => println("DO Nothing")
                   }
-                case _ => println("DO Nothing")
+                }
               }
             }
-          }
-        }
+      }
     }
   }
 
@@ -140,7 +153,7 @@ final class SinkActor[A <: Model](
 
 final class SinkActorRunner[A <: Model](
     handler: List[SequenceHandler[A, _]],
-    func: PartialFunction[Any, (Int, List[(String, A)])],
+    func: PartialFunction[Any, DataForRun[A]],
     ackref: ActorRef
 ) extends Actor
     with ActorLogging {
@@ -148,46 +161,62 @@ final class SinkActorRunner[A <: Model](
   implicit val ec = context.dispatcher
   implicit val logAd = log
 
+  var origin: Option[ActorRef] = None
+
   /** Process will start as soon as database is ready **/
   val partial = func andThen {
-    case (ngrps, list) =>
-      var origin = sender()
-      handler
-        .traverse(_.processBatchinOneModelTupled(list, 0, Nil))
-        .unsafePerformAsync { r =>
-          r match {
-            case -\/(err) => {
-              log.error(s"Error ${err}")
-            }
-            case \/-(list) =>
-              list match {
-                case ((n, l), f) :: t => {
-                  if (!l.isEmpty) {
-                    if (l.size == Settings.entries) {
-                      val strMaster = f(l.left)
-                      val strTail = t.map {
-                        case ((i, e), f2) =>
-                          f2(e.map(_._2).right)
-                      }
-                      val toPrint = {
-                        if (strTail.isEmpty)
-                          s"${strMaster}"
-                        else {
-                          s"${strMaster},${strTail.foldLeft("")((a, acc) => a ++ acc)}"
-                        }
-                      }
-                      println(toPrint)
-                    }
-                    ackref ! AckBox(ngrps, n, origin)
-                  } else {
-                    log.warning("Invalid message. Requesting more elements")
-                    origin ! "ack"
-                  }
+    case list => {
+      origin = Some(sender())
+      val result = list foreach {
+        case (ngrps, list) =>
+          handler
+            .traverse(_.processBatchinOneModelTupled(list, 0, Nil))
+            .unsafePerformAsync { r =>
+              r match {
+                case -\/(err) => {
+                  log.error(s"Error ${err}")
                 }
-                case _ => // Do nothing!!
+                case \/-(list) =>
+                  list match {
+                    case ((n, l), f) :: t => {
+                      if (!l.isEmpty) {
+                        l.foreach { l1 =>
+                          if (l1.size == Settings.entries) {
+                            val strMaster = f(l1.left)
+                            val masterModel = l1.head._2.model
+
+                            val strTail = t.map {
+                              case ((i, e), f2) => {
+                                if (e.size == Settings.entries) {
+                                  e.map(r => f2(r.left))
+                                } else ""
+                              }
+                            }
+
+                            val toPrint = {
+                              if (strTail.isEmpty)
+                                s"${strMaster}"
+                              else {
+                                s"${strMaster},${strTail.foldLeft("")(
+                                  (a, acc) => s"${a}" ++ "\n" ++ s"${acc}")}"
+                              }
+                            }
+                            println(toPrint)
+                          }
+                          ackref ! AckBox(ngrps, n, origin.get)
+                        }
+                      } else {
+                        log.warning(
+                          "Invalid message. Requesting more elements")
+                        origin.get ! "ack"
+                      }
+                    }
+                    case _ => // Do nothing!!
+                  }
               }
-          }
-        }
+            }
+      }
+    }
   }
 
   def receive: Receive = partial orElse _receive
