@@ -10,7 +10,7 @@ val akkaVersion = "2.4.17"
 val logbackVersion = "1.2.3"
 
 libraryDependencies ++= Seq(
-  "org.reactivemongo" %% "reactivemongo" % "0.12.1",
+  "org.reactivemongo" %% "reactivemongo" % "0.12.5",
   "com.chuusai" %% "shapeless" % "2.3.2",
   "io.verizon.delorean" %% "core" % "1.2.40-scalaz-7.2",
   "org.scalacheck" %% "scalacheck" % "1.13.5",
@@ -19,12 +19,9 @@ libraryDependencies ++= Seq(
   "org.slf4j" % "log4j-over-slf4j" % "1.7.25",
   "ch.qos.logback" % "logback-classic" % logbackVersion,
   ("com.typesafe.akka" %% "akka-stream" % akkaVersion).exclude("com.typesafe.akka", "actor"),
-  "org.julienrf" %% "reactivemongo-derived-codecs" % "2.1-SNAPSHOT",
+  "org.julienrf" %% "reactivemongo-derived-codecs" % "3.0.0",
   "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % Test
 )
-
-resolvers +=
-  "Artifactory" at "http://artifactory.default.svc.cluster.local:8081/artifactory/ml/reactive-mongo-derived/snapshots"
 
 publishTo := {
   val nexus = "http://artifactory.default.svc.cluster.local:8081/artifactory/ml/sequence-handler-core/"
