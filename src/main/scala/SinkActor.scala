@@ -5,6 +5,7 @@ import akka.event.LoggingAdapter
 import com.bbvalabs.ai.SequencerTypes.{DataForRun, DataForTrain}
 import com.bbvalabs.ai._
 
+import scalaz.effect.IO
 import scalaz.{-\/, Scalaz, \/, \/-}
 import scalaz.syntax.traverse.ToTraverseOps
 import scalaz.std.list.listInstance
@@ -21,6 +22,7 @@ object SinkFunctions {
   val notReady: String = "notready"
   val ready: String = "ready"
   val completeMessage = "complete"
+  val completed = "completed"
 
   def getSinkCommonPartialFunction(s: ActorRef)(
       implicit log: LoggingAdapter): PartialFunction[Any, Unit] = {
@@ -51,15 +53,18 @@ import SinkFunctions._
 import Scalaz._
 
 final class SinkActor[A <: Model](
+    settings: Settings,
     handler: List[SequenceHandler[A, _]],
     func: PartialFunction[Any, DataForTrain[A]],
     ackref: ActorRef,
-    funcLabel: A => String
+    funcLabel: A => String,
+    io: String => IO[Unit]
 ) extends Actor
     with ActorLogging {
 
   implicit val ec = context.dispatcher
   implicit val logAd = log
+
   var origin: Option[ActorRef] = None
 
   /** Process will start as soon as database is ready **/
@@ -80,30 +85,33 @@ final class SinkActor[A <: Model](
                     case ((n, l), f) :: t =>
                       if (!l.isEmpty) {
                         l.foreach { l1 =>
-                          /** l1 corresponds to th lenfht of each Delta list lenght **/
-                          if (l1.size == Settings.entries) {
+                          /** l1 corresponds to th length of each Delta list length **/
+                          if (l1.size == settings.entries) {
                             val strMaster = f(l1.right)
                             /* master model for label when window > 1 */
                             val masterModel = l1.head.model
                             val strTail = t.map {
                               case ((i, e), f2) => {
-                                if (e.size == Settings.entries) {
+                                //if (e.size == settings.entries) {
                                   e.map(r => f2(r.right))
-                                } else ""
+                                //} else List()
                               }
                             }
 
                             /** to print to concatenate print from head and tail **/
                             val toPrint = {
-                              if (strTail.isEmpty)
+                              if (strTail.size == 0)
                                 s"${strMaster},${funcLabel(masterModel)}"
-                              else
-                                s"${strMaster},${strTail.foldLeft("")((a, acc) =>
-                                  s"${a}" ++ "\n" ++ s"${acc}")},${funcLabel(masterModel)}"
+                              else {
+                                val result = s"${strMaster},${
+                                  strTail.foldLeft("")((a, acc) =>
+                                    s"${a}" ++ s"${acc.mkString(",")}")
+                                },${funcLabel(masterModel)}"
+                                result
+                              }
                             }
 
-                            // TODO: make this more generic !!
-                            println(toPrint)
+                            io(toPrint).unsafePerformIO()
                           }
                           ackref ! AckBox(ngrps, n, origin.get)
                         }
@@ -140,7 +148,8 @@ final class SinkActor[A <: Model](
 
     case `completeMessage` => {
       log.warning("EOF received. Completing stream and exiting...")
-      context.system.terminate().onComplete(_ => System.exit(0))
+      sender ! completed
+      //context.system.terminate().onComplete(_ => System.exit(0))
     }
 
     /** Error sent. Just log and ignore **/
@@ -152,9 +161,11 @@ final class SinkActor[A <: Model](
 }
 
 final class SinkActorRunner[A <: Model](
+    settings: Settings,
     handler: List[SequenceHandler[A, _]],
     func: PartialFunction[Any, DataForRun[A]],
-    ackref: ActorRef
+    ackref: ActorRef,
+    io: String => IO[Unit]
 ) extends Actor
     with ActorLogging {
 
@@ -162,6 +173,7 @@ final class SinkActorRunner[A <: Model](
   implicit val logAd = log
 
   var origin: Option[ActorRef] = None
+  var completed : Boolean = false
 
   /** Process will start as soon as database is ready **/
   val partial = func andThen {
@@ -181,15 +193,15 @@ final class SinkActorRunner[A <: Model](
                     case ((n, l), f) :: t => {
                       if (!l.isEmpty) {
                         l.foreach { l1 =>
-                          if (l1.size == Settings.entries) {
+                          if (l1.size == settings.entries) {
                             val strMaster = f(l1.left)
                             val masterModel = l1.head._2.model
 
                             val strTail = t.map {
                               case ((i, e), f2) => {
-                                if (e.size == Settings.entries) {
+                               // if (e.size == settings.entries) {
                                   e.map(r => f2(r.left))
-                                } else ""
+                               // } else List()
                               }
                             }
 
@@ -198,10 +210,10 @@ final class SinkActorRunner[A <: Model](
                                 s"${strMaster}"
                               else {
                                 s"${strMaster},${strTail.foldLeft("")(
-                                  (a, acc) => s"${a}" ++ "\n" ++ s"${acc}")}"
+                                  (a, acc) => s"${a}" ++ s"${acc.mkString(",")}")}"
                               }
                             }
-                            println(toPrint)
+                            io(toPrint).unsafePerformIO
                           }
                           ackref ! AckBox(ngrps, n, origin.get)
                         }
@@ -236,7 +248,7 @@ final class SinkActorRunner[A <: Model](
 
     case `completeMessage` => {
       log.warning("EOF received. Completing stream and exiting...")
-      context.system.terminate().onComplete(_ => System.exit(0))
+      sender ! completed
     }
 
     /** Error sent. Just log and ignore **/

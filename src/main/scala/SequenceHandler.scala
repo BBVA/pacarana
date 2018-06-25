@@ -1,7 +1,11 @@
 package com.bbvalabs.ai
 
+import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.stream.scaladsl.Source
+import akka.stream.{ActorMaterializer, Graph, SourceShape}
 import com.bbvalabs.ai.SequencerTypes.{DataForRun, DataForTrain}
+import com.bbvalabs.ai.runtime.StreamOps.StdinSourceStage
 import com.bbvalabs.ai.runtime._
 import reactivemongo.api.collections.bson.BSONCollection
 
@@ -10,6 +14,7 @@ import Scalaz._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scalaz.concurrent.Task
 import scala.concurrent.duration._
+import scalaz.effect.IO
 
 /** A trait that configures the algebra for the Sequencer model. It is
   *   parametrized on one type parameter that represent the following:
@@ -44,36 +49,51 @@ import scala.concurrent.duration._
   *  @review 26/04/2017 Transform Sequence handler to Future sh
   */
 object SequenceHandlerStreamTrainer {
-  def apply[A <: Model, C](seqHandler: List[SequenceHandler[A, _]])(
+  def apply[A <: Model, C](seqHandler: List[SequenceHandler[A, _]], stdinSource: Source[String, NotUsed], funcLabel: A => String)(
       implicit as: ActorSystem,
+      am: ActorMaterializer,
       cv: CSVConverter[A],
       ford: A => C,
       ord: scala.Ordering[C],
-      funcLabel: A => String) = {
+      io: String => IO[Unit],
+      settings: Settings) = {
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
+
+    //val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
+    //val stdinSource: Source[String, NotUsed] =
+    //  Source.fromGraph(sourceGraph).async
+
     val sinkStream = as.actorOf(
-      Props.create(classOf[SinkActor[A]],
+      Props(new SinkActor[A](
+                   settings,
                    seqHandler,
                    Implicits.partialfunc,
                    taskSupervisor,
-                   funcLabel))
-    new StreamTrainer[A, C](sinkStream)
+                   funcLabel,io)))
+    new StreamTrainer[A, C](settings, sinkStream, stdinSource)
   }
 }
 
 // TODO: Check if it is possible common factor
 object SequenceHandlerStreamRunner {
-  def apply[A <: Model](seqHandler: List[SequenceHandler[A, _]])(
+  def apply[A <: Model](seqHandler: List[SequenceHandler[A, _]], stdinSource: Source[String, NotUsed])(
       implicit as: ActorSystem,
-      cv: CSVConverter[(String, A)]) = {
+      am: ActorMaterializer,
+      cv: CSVConverter[(String, A)],
+      io: String => IO[Unit],
+      settings: Settings) = {
 
+    /*val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
+    val stdinSource: Source[String, NotUsed] =
+      Source.fromGraph(sourceGraph).async
+*/
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
-      Props.create(classOf[SinkActorRunner[A]],
+      Props(new SinkActorRunner[A](settings,
                    seqHandler,
                    Implicits.partialfuncRunner,
-                   taskSupervisor))
-    new StreamRunner[A](sinkStream)
+                   taskSupervisor, io)))
+    new StreamRunner[A](settings, sinkStream, stdinSource)
   }
 }
 
@@ -228,35 +248,6 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
   }
 
   /**
-    * Program which processes one single delta model operation. Updated to print sequence
-    * TODO: Change to Monad transformer
-    * @param delta data type built from Model2 and DeltaType
-    * @return function that is activated with a repo as parameter and returns one operation result.
-    */
-  def processWithIO(delta: DeltaModel2[A, B])(
-      f: Sequence[A, B] => Unit): Task[Sequence[A, B]] = {
-
-    for {
-      a <- liftT(delta.model)
-      b <- get(delta.model)(repo)
-      c <- {
-        b match {
-          case AnySequence(id, list) => {
-            val seq = monoid.append(b, AnySequence(id, delta :: Nil))
-            // to print sequence --- USE Monad Transformer !!
-            f(seq)
-            (updateSequence(delta.model, seq)(repo))
-          }
-          case NoSequence => {
-            val seq = AnySequence(delta.model.id, delta :: Nil)
-            (insertSequence(seq)(repo))
-          }
-        }
-      }
-    } yield c
-  }
-
-  /**
     * This function process a bunch of delta models using Task type. Task are suspended inside a Trampoline to be executed
     * sequential to avoid race conditions when executing in one sequence model
     * @param list
@@ -273,7 +264,7 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
         process(h) flatMap { p =>
           p match {
             case AnySequence(id, deltas) => {
-              val listmodel = t.map(_.model)
+              //val listmodel = t.map(_.model)
               val result =
                 processBatchinOneModel(t.map(_.model),
                                        n + 1,

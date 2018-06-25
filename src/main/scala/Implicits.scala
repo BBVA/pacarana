@@ -1,18 +1,30 @@
 package com.bbvalabs.ai
 
+import akka.NotUsed
 import akka.actor.ActorSystem
+import akka.stream.scaladsl.Source
+import akka.stream.{ActorMaterializer, Graph, SourceShape}
 import com.bbvalabs.ai.runtime.{InputMsgs, InputMsgsRunner}
 import reactivemongo.bson.{BSONDocumentHandler, derived}
-import Settings._
 import com.bbvalabs.ai.SequencerTypes.{DataForRun, DataForTrain}
+import com.bbvalabs.ai.runtime.StreamOps.StdinSourceStage
 
 import scala.concurrent.ExecutionContext
+import scalaz.effect.IO
 import scalaz.{-\/, Monoid, \/, \/-}
 
 /**
   * Created by emiliano on 24/3/17.
   */
+object Sources {
+  val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
+  val stdinSource: Source[String, NotUsed] =
+    Source.fromGraph(sourceGraph).async
+}
+
 object Implicits {
+
+  //implicit val settings = new Settings
 
   implicit def monoidInstance[A, B](
       implicit f: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B])
@@ -70,13 +82,13 @@ object Implicits {
   }
 
   implicit class liftInMonoid[A <: Model, B <: DeltaType](f: (A, A) => (A, B)) {
-    def lift: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
+    def lift(implicit settings: Settings): (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
       (o, n) match {
         case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
           AnySequence(
             nid,
             f(nlist.head.model, olist.head.model).liftToDelta :: {
-              if (olist.length == entries) olist.dropRight(1) else olist
+              if (olist.length == settings.entries) olist.dropRight(1) else olist
             })
         }
         case (NoSequence, seq) =>
@@ -87,12 +99,12 @@ object Implicits {
   }
 
   implicit class liftInMonoidForSequence[A, B](f: (A, List[A]) => (A, B)) {
-    def lift: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
+    def lift(implicit settings: Settings): (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
       (o, n) match {
         case (AnySequence(oid, olist), AnySequence(nid, nlist)) => {
           val omodel = olist.map(_.model)
           AnySequence(nid, f(nlist.head.model, omodel).liftToDelta :: {
-            if (olist.length == entries) olist.dropRight(1) else olist
+            if (olist.length == settings.entries) olist.dropRight(1) else olist
           })
         }
         case (NoSequence, seq) =>
@@ -104,14 +116,14 @@ object Implicits {
 
   implicit class liftInMonoidForDelta2[A <: Model, B <: DeltaType](
       f: ((A, B), (A, B)) => (A, B)) {
-    def lift: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
+    def lift(implicit settings: Settings): (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
       (o, n) match {
         case (AnySequence(oid, olist), AnySequence(nid, nlist)) =>
           AnySequence(
             nid, {
-              (f((nlist.head.model, nlist.head.delta),
-                 (olist.head.model, olist.head.delta))).liftToDelta :: {
-                if (olist.length == entries) olist.dropRight(1) else olist
+              f((nlist.head.model, nlist.head.delta),
+                (olist.head.model, olist.head.delta)).liftToDelta :: {
+                if (olist.length == settings.entries) olist.dropRight(1) else olist
               }
             }
           )
@@ -125,14 +137,14 @@ object Implicits {
   // TODO: Cahange entries to be local for each sequencer
   implicit class liftInMonoidForDelta2Agg[A <: Model, B <: DeltaType](
       f: ((A, B), List[(A, B)]) => (A, B)) {
-    def lift: (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
+    def lift(implicit settings: Settings): (Sequence[A, B], Sequence[A, B]) => Sequence[A, B] = { (o, n) =>
       (o, n) match {
         case (AnySequence(oid, olist), AnySequence(nid, nlist)) =>
           AnySequence(
             nid, {
               (f((nlist.head.model, nlist.head.delta),
                  olist.map(f => (f.model, f.delta)))).liftToDelta :: {
-                if (olist.length == entries) olist.dropRight(1) else olist
+                if (olist.length == settings.entries) olist.dropRight(1) else olist
               }
             }
           )
@@ -143,51 +155,36 @@ object Implicits {
     }
   }
 
-  implicit class appendArrow[A <: Model, B <: DeltaType, C](
-      in: DeltaModel2[A, B]) {
-    def <<<~(f: A => String): String = {
-      f(in.model)
-    }
-  }
-
   implicit def printDelta[A <: Model, B <: DeltaType](
       implicit mconverter: CSVConverter[A],
       dconverter: CSVConverter[B],
       ignoreFunc: ((A, B)) => String
   ): List[(String, DeltaModel2[A, B])] \/ List[DeltaModel2[A, B]] => String = {
-    // TODO: make this more generic. Avoid repeated code
-    (d2: (List[(String, DeltaModel2[A, B])]) \/ List[DeltaModel2[A, B]]) =>
-      d2 match {
-        case -\/(resdis) => {
-          val ids = resdis.map(_._1).head
-          val des = resdis.map(_._2)
-          val res = des.foldLeft("") { (acc, d) =>
-            val tr0 = ignoreFunc((d.model, d.delta))
-            acc ++ "," ++ tr0
-          }
-          val f1 = ids + res
-          f1
-        }
-        case \/-(resdis) => {
-          val res = resdis.foldLeft("") { (acc, d) =>
-            val tr0 = ignoreFunc(d.model, d.delta)
-            (acc ++ "," ++ tr0)
-          }
-          val f = s"${res.drop(1)}"
-          f
-        }
+    case -\/(resdis) => {
+      val ids = resdis.map(_._1).head
+      val des = resdis.map(_._2)
+      val res = des.foldLeft("") { (acc, d) =>
+        val tr0 = ignoreFunc((d.model, d.delta))
+        acc ++ "," ++ tr0
       }
-  }
-
-  implicit class modelMethods[A <: Model, B <: DeltaType](model: A) {
-    def ~>(idelta: B): DeltaModel2[A, B] = {
-      DeltaModel2(model, idelta)
+      val f1 = ids + res
+      f1
+    }
+    case \/-(resdis) => {
+      val res = resdis.foldLeft("") { (acc, d) =>
+        val tr0 = ignoreFunc(d.model, d.delta)
+        (acc ++ "," ++ tr0)
+      }
+      val f = s"${res.drop(1)}"
+      f
     }
   }
 
   def group[A, K](list: List[A])(f: A => K): Map[K, List[A]] = {
     list.groupBy(f)
   }
+
+  implicit def ioConsole(str: String) = IO { println(str) }
 
   implicit val s1 = derived.codec[Option[Double]]
   implicit val s2 = derived.codec[Option[String]]
@@ -207,6 +204,7 @@ object Implicits {
 
   implicit val as = ActorSystem("sequence-handler")
   implicit val ec = as.dispatcher
+  implicit val am = ActorMaterializer()
 
   trait Output[A <: Model, B <: DeltaType] {
     def output(_new: (A, B)): String
@@ -215,22 +213,22 @@ object Implicits {
 
   trait SimpleDelta[A <: Model, B <: DeltaType] {
     def append(_new: A, last: A): (A, B)
-    implicit def _append = append _ lift
+    implicit def _append(implicit settings: Settings) = append _ lift
   }
 
   trait Aggregate[A <: Model, B <: DeltaType] {
     def append2(_new: A, storedSequence: List[A]): (A, B)
-    implicit def _append = append2 _ lift
+    implicit def _append(implicit settings: Settings) = append2 _ lift
   }
 
   trait SimpleAppend[A <: Model, B <: DeltaType] {
     def fullAppend(_newTuple: (A, B), lastTuple: (A, B)): (A, B)
-    implicit def _fullDelta = fullAppend _ lift
+    implicit def _fullDelta(implicit settings: Settings) = fullAppend _ lift
   }
 
   trait SimpleAppendWithSerie[A <: Model, B <: DeltaType] {
     def fullAppend2(_newTuple: (A, B), storedSerie: List[(A, B)]): (A, B)
-    implicit def _fullAppend2 = fullAppend2 _ lift
+    implicit def _fullAppend2(implicit settings: Settings) = fullAppend2 _ lift
   }
 
   trait WithOrdering[A <: Model, C] {

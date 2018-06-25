@@ -63,29 +63,23 @@ object StreamOps {
       }
     }
   }
+
 }
 
 final class StreamTrainer[A <: Model, C](
-    sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[A], ford: A => C, ord: Ordering[C]) {
+    settings: Settings, sink: ActorRef, source: Source[String, NotUsed])(implicit as: ActorSystem, am: ActorMaterializer, cv: CSVConverter[A], ford: A => C, ord: Ordering[C]) {
 
   import StreamOps._
-  import Settings._
 
   implicit val ec = as.dispatcher
-  implicit val materializer = ActorMaterializer()
 
   val ackMessage      = "ack"
   val initMessage     = "start"
   val completeMessage = "complete"
   val healthCheck     = "heartbeat"
 
-  val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
-
-  val stdinSource: Source[String, NotUsed] =
-    Source.fromGraph(sourceGraph).async
-
-  val stream = stdinSource
-    .groupedWithin(grouped, milliss milliseconds)
+  val stream = source
+    .groupedWithin(settings.grouped, settings.milliss milliseconds)
     .map(_.foldLeft(List[A]()) { (a, b) =>
       cv.from(b) match {
         case Success(line) => {
@@ -96,7 +90,7 @@ final class StreamTrainer[A <: Model, C](
         }
       }
     })
-    .map(e => { InputMsgs(e.sortBy(ford)) })
+    .map(e => InputMsgs(e.sortBy(ford)))
     .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))
 
   checkIfSinkIsActive(sink).onComplete(
@@ -104,26 +98,19 @@ final class StreamTrainer[A <: Model, C](
   )
 }
 
-final class StreamRunner[A <: Model](sink: ActorRef)(implicit as: ActorSystem, cv: CSVConverter[(String, A)]) {
+final class StreamRunner[A <: Model](settings: Settings, sink: ActorRef, source: Source[String, NotUsed])(implicit as: ActorSystem, am: ActorMaterializer, cv: CSVConverter[(String, A)]) {
   import StreamOps._
-  import Settings._
 
   implicit val ec = as.dispatcher
-  implicit val materializer = ActorMaterializer()
 
   val ackMessage      = "ack"
   val initMessage     = "start"
   val completeMessage = "complete"
   val healthCheck     = "heartbeat"
 
-  val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
-
-  val stdinSource: Source[String, NotUsed] =
-    Source.fromGraph(sourceGraph).async
-
   // TODO: Common factor. The only diference is CSV converter
-  val stream = stdinSource
-    .groupedWithin(grouped, milliss milliseconds)
+  val stream = source
+    .groupedWithin(settings.grouped, settings.milliss milliseconds)
     .map(_.foldLeft(List[(String, A)]()) { (a, b) =>
       cv.from(b) match {
         case Success(line) => {
