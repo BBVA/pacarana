@@ -13,13 +13,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.io.StdIn
 import scala.util.{Failure, Success}
-import scalaz.concurrent.Task
-import scalaz.{-\/, \/, \/-}
 
-/**
-  * Created by e049627 on 5/6/17.
-  */
-case class TubledBox[A <: Model](t: List[(String, A)])
 case class InputMsgs[A <: Model](list: List[A])
 case class InputMsgsRunner[A <: Model](list: List[(String, A)])
 

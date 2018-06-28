@@ -52,7 +52,7 @@ class StreamRunnerSpec
 
   }
 
-  "A Stream in training mode" must {
+  "A Stream in running mode" must {
 
     "read events from the standard input and put in the ouptut stream the enriched events" in {
 

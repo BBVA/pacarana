@@ -100,17 +100,31 @@ final class SinkActor[A <: Model](
 
                             /** to print to concatenate print from head and tail **/
                             val toPrint = {
-                              if (strTail.size == 0)
-                                s"${strMaster},${funcLabel(masterModel)}"
+                              val label = funcLabel(masterModel)
+                              if (strTail.size == 0) {
+                                if (!label.isEmpty)
+                                  s"${strMaster},${funcLabel(masterModel)}"
+                                else
+                                  s"${strMaster}"
+                              }
                               else {
-                                val result = s"${strMaster},${
-                                  strTail.foldLeft("")((a, acc) =>
-                                    s"${a}" ++ s"${acc.mkString(",")}")
-                                },${funcLabel(masterModel)}"
+                                val result = {
+                                  if (!label.isEmpty) {
+                                    s"${strMaster},${
+                                      strTail.foldLeft("")((a, acc) =>
+                                        s"${a}" ++ s"${acc.mkString(",")}")
+                                    },${funcLabel(masterModel)}"
+                                  }
+                                  else {
+                                    s"${strMaster},${
+                                      strTail.foldLeft("")((a, acc) =>
+                                        s"${a}" ++ s"${acc.mkString(",")}")
+                                    }"
+                                  }
+                                }
                                 result
                               }
                             }
-
                             io(toPrint).unsafePerformIO()
                           }
                           ackref ! AckBox(ngrps, n, origin.get)
@@ -200,7 +214,9 @@ final class SinkActorRunner[A <: Model](
                             val strTail = t.map {
                               case ((i, e), f2) => {
                                // if (e.size == settings.entries) {
-                                  e.map(r => f2(r.left))
+                                // e.map(r => f2(r.left))
+                                val w = e.map(r => r.map(e => e._2))
+                                w.map(w0 => f2(w0.right))
                                // } else List()
                               }
                             }

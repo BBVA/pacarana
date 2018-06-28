@@ -3,9 +3,7 @@ package com.bbvalabs.ai
 import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.scaladsl.Source
-import akka.stream.{ActorMaterializer, Graph, SourceShape}
-import com.bbvalabs.ai.SequencerTypes.{DataForRun, DataForTrain}
-import com.bbvalabs.ai.runtime.StreamOps.StdinSourceStage
+import akka.stream.ActorMaterializer
 import com.bbvalabs.ai.runtime._
 import reactivemongo.api.collections.bson.BSONCollection
 
@@ -17,36 +15,6 @@ import scala.concurrent.duration._
 import scalaz.effect.IO
 
 /** A trait that configures the algebra for the Sequencer model. It is
-  *   parametrized on one type parameter that represent the following:
-  *
-  * Model: Data type that represents the transaction, movement or whatever
-  * Sequence: Represents one aggregation by one field which represents the delta
-  * configuration in one model data sequence.
-  *
-  *  @example {{{
-  *
-  *       case class Model2(id: String, attrb1: String, opTime: String)
-  *       case class TransactionInterval(interval: Double) extends DeltaType
-  *
-  *       val instance = new SequenceHandler[TransactionInterval] {
-  *          override val repo: Repository[TransactionInterval] = [ ... provide a repo implementation]
-  *       }
-  *
-  *       val monoid = new Monoid[Sequence[TransactionInterval]] {
-  *        ...
-  *       }
-  *
-  *       instance.process(DeltaModel2(parsed.get, TransactionInterval(0)))([..provide a monoid implementation])
-  *
-  *
-  *  @note All operations are compose with the scalaz Task type. It should be a high kinded type,
-  *        however it could be more complex to understand. This api will be codified in a full functional structure
-  *        in the future.
-  *
-  *  @author  Emiliano Martinez
-  *  @date  17/03/2017
-  *
-  *  @review 26/04/2017 Transform Sequence handler to Future sh
   */
 object SequenceHandlerStreamTrainer {
   def apply[A <: Model, C](seqHandler: List[SequenceHandler[A, _]], stdinSource: Source[String, NotUsed], funcLabel: A => String)(

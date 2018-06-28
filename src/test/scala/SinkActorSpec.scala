@@ -7,12 +7,15 @@ import com.bbvalabs.ai.Implicits._
 import com.bbvalabs.ai.runtime._
 import akka.util.Timeout
 import shapeless.lens
-
 import akka.pattern.ask
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
+
 import scala.concurrent.duration._
 import scala.concurrent.Await
 import scalaz.effect.IO
 
+@RunWith(classOf[JUnitRunner])
 class SinkActorSpec
   extends WordSpecLike with Matchers {
 

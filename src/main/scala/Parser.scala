@@ -6,7 +6,6 @@ package com.bbvalabs.ai
   * TODO: In future DateTimes will be added.
   */
 import shapeless._
-import syntax.singleton._
 
 import scala.collection.immutable.{:: => Cons}
 import scala.util.{Failure, Success, Try}
@@ -20,14 +19,10 @@ trait CSVConverter[T] {
   def to(t: T): String
 }
 
-
-/** Instances of the CSVConverter trait */
 object CSVConverter {
   def apply[T](implicit st: Lazy[CSVConverter[T]]): CSVConverter[T] = st.value
 
   def fail(s: String) = Failure(new CSVException(s))
-
-  // Primitives
 
   implicit def stringCSVConverter: CSVConverter[String] =
     new CSVConverter[String] {
@@ -97,6 +92,7 @@ object CSVConverter {
       def to(l: List[A]): String = l.map(ec.to).mkString("\n")
     }
 
+  /* Runner mode to extract first field as an hypothetical event preceded by an id*/
   implicit def runnerModelConverter[A, B <: Model](
       implicit c1: CSVConverter[A],
       c2: CSVConverter[B]): CSVConverter[(A, B)] = {
@@ -125,7 +121,7 @@ object CSVConverter {
       def to(n: HNil) = ""
     }
 
-  implicit def deriveHCons[V, T <: HList](
+  implicit def deriveHList[V, T <: HList](
       implicit scv: Lazy[CSVConverter[V]],
       sct: Lazy[CSVConverter[T]]): CSVConverter[V :: T] =
     new CSVConverter[V :: T] {
@@ -145,7 +141,7 @@ object CSVConverter {
       }
     }
 
-  implicit def deriveHConsOption[V, T <: HList](
+  implicit def deriveHListOption[V, T <: HList](
       implicit scv: Lazy[CSVConverter[V]],
       sct: Lazy[CSVConverter[T]]): CSVConverter[Option[V] :: T] =
     new CSVConverter[Option[V] :: T] {
@@ -167,8 +163,6 @@ object CSVConverter {
           ft.tail)
       }
     }
-
-  // Anything with a Generic
 
   implicit def deriveClass[A, R](implicit gen: Generic.Aux[A, R],
                                  conv: CSVConverter[R]): CSVConverter[A] =
