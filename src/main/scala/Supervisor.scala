@@ -12,12 +12,15 @@ final class TaskSupervisor extends Actor with ActorLogging {
   var _total: Int  = 0
 
   def receive = {
-    case AckBox(total, n, ref) => {
-      counter = counter + 1
-      _total = (_total + total)
+    case AckBox(totalTask, n, ref) => {
+      counter = counter + n
+      _total = totalTask
+      log.debug(s"Total tasks: ${totalTask}")
+      log.debug(s"N Bulk: ${n}")
       log.debug(s"Counter: ${counter}")
-      log.debug(s"Total: ${total}")
-      if (counter == total) {
+      log.debug(s"Total: ${_total}")
+      if (counter == _total) {
+        log.debug(s"Counter to 0")
         counter = 0
         ref ! "ack"
       }

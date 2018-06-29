@@ -71,6 +71,9 @@ final class SinkActor[A <: Model](
   val partial = func andThen {
     case list => {
       origin = Some(sender())
+      val e2 = list.map(_._2.size).sum
+
+      val totalTask = e2
       val result = list foreach {
         case (ngrps, list) =>
           handler
@@ -83,7 +86,10 @@ final class SinkActor[A <: Model](
                 case \/-(list) => {
                   list match {
                     case ((n, l), f) :: t =>
+                      log.debug(s"n tasks: ${n}")
+                      log.debug(s"total tasks ${totalTask}")
                       if (!l.isEmpty) {
+                        log.debug(s"L size ${l.size}")
                         l.foreach { l1 =>
                           /** l1 corresponds to th length of each Delta list length **/
                           if (l1.size == settings.entries) {
@@ -127,7 +133,8 @@ final class SinkActor[A <: Model](
                             }
                             io(toPrint).unsafePerformIO()
                           }
-                          ackref ! AckBox(ngrps, n, origin.get)
+
+                          ackref ! AckBox(totalTask, 1, origin.get)
                         }
 
                       } else {
@@ -193,6 +200,8 @@ final class SinkActorRunner[A <: Model](
   val partial = func andThen {
     case list => {
       origin = Some(sender())
+      val e2 = list.map(_._2.size).sum
+      val totalTask = e2
       val result = list foreach {
         case (ngrps, list) =>
           handler
@@ -231,7 +240,7 @@ final class SinkActorRunner[A <: Model](
                             }
                             io(toPrint).unsafePerformIO
                           }
-                          ackref ! AckBox(ngrps, n, origin.get)
+                          ackref ! AckBox(totalTask, 1, origin.get)
                         }
                       } else {
                         log.warning(

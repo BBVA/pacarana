@@ -1,6 +1,6 @@
 package com.bbvalabs.ai.examples
 
-import com.bbvalabs.ai.Implicits.{Aggregate, Output}
+import com.bbvalabs.ai.Implicits.{Aggregate, Output, SimpleAppend, SimpleDelta}
 import com.bbvalabs.ai._
 import reactivemongo.bson.{BSONDocumentHandler, derived}
 
@@ -30,27 +30,13 @@ object implicits {
   implicit val _settings : Settings = new Settings
 }
 
-object StreamParameters extends Aggregate[StockPrice, DeltaValue] with Output[StockPrice, DeltaValue]{
+object StreamParameters extends SimpleAppend[StockPrice, DeltaValue] with Output[StockPrice, DeltaValue]{
 
   import implicits._
   import Implicits._
   import shapeless._
 
   // This is the aggregation funtion that will be executed for each incomming event
-  override def append2(_new: StockPrice, storedSequence: List[StockPrice]): (StockPrice, DeltaValue) = {
-    // Get the births number from the incoming event and add to the list
-    val number = _new.Open
-    val nelist = number :: storedSequence.map(_.Open)
-
-    // If your window size is 5
-    val window = if(nelist.size > 5)
-      nelist.dropRight(1)
-    else
-      nelist
-
-    (_new, DeltaValue(window, (window.sum / 5)))
-  }
-
   implicit val modelname : String = "model"
   implicit val field = lens[StockPrice] >> 'id
   implicit val initDelta : DeltaValue = DeltaValue(Nil,0)
@@ -63,6 +49,22 @@ object StreamParameters extends Aggregate[StockPrice, DeltaValue] with Output[St
   }
 
   val sh : Future[SequenceHandler[StockPrice, DeltaValue]] = SequenceHandler[StockPrice, DeltaValue]
+
+  override def fullAppend(_newTuple: (StockPrice, DeltaValue), lastTuple: (StockPrice, DeltaValue)): (StockPrice, DeltaValue) = {
+
+    // Create new delta
+    val newStockPrice = _newTuple._1
+    val storedWindow  = lastTuple._2.window
+
+    val updatedWindow = newStockPrice.Open :: storedWindow
+    val rotateWindow  = if(updatedWindow.length > 5) {
+      updatedWindow.dropRight(1)
+    } else updatedWindow
+
+    val movingAverage = rotateWindow.sum / rotateWindow.size
+
+    (newStockPrice, DeltaValue(rotateWindow, movingAverage) )
+  }
 }
 
 

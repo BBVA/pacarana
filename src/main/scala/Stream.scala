@@ -33,8 +33,9 @@ object StreamOps {
             val str = StdIn.readLine()
             if (str != null)
               push(out, str)
-            else
+            else {
               complete(out)
+            }
           }
         })
       }
@@ -73,6 +74,12 @@ final class StreamTrainer[A <: Model, C](
   val healthCheck     = "heartbeat"
 
   val stream = source
+    .watchTermination()((_, f) => {
+      f.onComplete {
+        case Success(e) => println("Success Exiting")
+        case Failure(err) => println("Error " + err)
+      }
+    })
     .groupedWithin(settings.grouped, settings.milliss milliseconds)
     .map(_.foldLeft(List[A]()) { (a, b) =>
       cv.from(b) match {
@@ -85,6 +92,12 @@ final class StreamTrainer[A <: Model, C](
       }
     })
     .map(e => InputMsgs(e.sortBy(ford)))
+    .watchTermination()((_, f) => {
+      f.onComplete {
+        case Success(e) => println("Success Exiting II")
+        case Failure(err) => println("Error II " + err)
+      }
+    })
     .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))
 
   checkIfSinkIsActive(sink).onComplete(
@@ -104,6 +117,12 @@ final class StreamRunner[A <: Model](settings: Settings, sink: ActorRef, source:
 
   // TODO: Common factor. The only diference is CSV converter
   val stream = source
+    .watchTermination()((_, f) => {
+      f.onComplete {
+        case Success(e) => println("Success Exiting")
+        case Failure(err) => println("Error " + err)
+      }
+    })
     .groupedWithin(settings.grouped, settings.milliss milliseconds)
     .map(_.foldLeft(List[(String, A)]()) { (a, b) =>
       cv.from(b) match {
@@ -116,6 +135,12 @@ final class StreamRunner[A <: Model](settings: Settings, sink: ActorRef, source:
       }
     })
     .map(e => InputMsgsRunner(e) )
+    .watchTermination()((_, f) => {
+      f.onComplete {
+        case Success(e) => println("Success Exiting II")
+        case Failure(err) => println("Error II " + err)
+      }
+    })
     .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))
 
   checkIfSinkIsActive(sink).onComplete(
