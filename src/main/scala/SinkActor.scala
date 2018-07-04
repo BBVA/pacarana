@@ -1,9 +1,11 @@
-package com.bbvalabs.ai.runtime
+package com.bbva.pacarana.runtime
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import akka.event.LoggingAdapter
-import com.bbvalabs.ai.SequencerTypes.{DataForRun, DataForTrain}
-import com.bbvalabs.ai._
+import com.bbva.pacarana.model.Model
+import com.bbva.pacarana.model.SequencerTypes.{DataForRun, DataForTrain}
+import com.bbva.pacarana.runtime.{AckBox, SequenceHandler}
+import com.bbva.pacarana.settings.Settings
 
 import scalaz.effect.IO
 import scalaz.{-\/, Scalaz, \/, \/-}
@@ -136,7 +138,6 @@ final class SinkActor[A <: Model](
 
                           ackref ! AckBox(totalTask, 1, origin.get)
                         }
-
                       } else {
                         // TODO: In case of input error a valid message is received. Change it in shapeless decoder to throw one exception
                         log.warning(

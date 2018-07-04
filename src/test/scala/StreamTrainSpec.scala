@@ -1,10 +1,12 @@
-package com.bbvalabs.ai.test
+package com.bbva.pacarana.tests
 
 import akka.actor.Props
 import akka.stream.scaladsl.Source
-import com.bbvalabs.ai.Implicits.as
-import com.bbvalabs.ai._
-import com.bbvalabs.ai.runtime.{SinkActor, StreamTrainer, TaskSupervisor}
+import com.bbva.pacarana.implicits.Implicits
+import com.bbva.pacarana.repository.Repository
+import com.bbva.pacarana.runtime.{SequenceHandler, SinkActor, StreamTrainer, TaskSupervisor}
+import com.bbva.pacarana.settings.Settings
+
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{Matchers, WordSpecLike}
@@ -14,14 +16,13 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scalaz.effect.IO
 
-
 class FakeSettings(nentries: Int) extends Settings {
   override val entries = nentries
 }
 
 
 import impls._
-import Implicits._
+import com.bbva.pacarana.implicits.Implicits._
 
 object streamCommons {
   def createSequenceHandler(settings: Settings, f: (ExampleModel, ExampleModel) => ExampleDelta)(implicit  lns: Lens[ExampleModel, String], col : String): (SequenceHandler[ExampleModel, ExampleDelta],

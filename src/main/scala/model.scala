@@ -1,4 +1,4 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.model
 
 object SequencerTypes {
   type DataForTrain[A] = List[(Int, List[A])]

@@ -1,10 +1,11 @@
-package com.bbvalabs.ai.test
+package com.bbva.pacarana.tests
 
-import akka.NotUsed
 import akka.actor.Props
 import akka.stream.scaladsl.Source
-import com.bbvalabs.ai._
-import com.bbvalabs.ai.runtime._
+import com.bbva.pacarana.implicits.Implicits
+import com.bbva.pacarana.repository.Repository
+import com.bbva.pacarana.runtime.{SequenceHandler, SinkActorRunner, StreamRunner, TaskSupervisor}
+import com.bbva.pacarana.settings.Settings
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
@@ -12,7 +13,7 @@ import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scalaz.effect.IO
-import shapeless.{Lens, lens}
+import shapeless.lens
 
 @RunWith(classOf[JUnitRunner])
 class StreamRunnerSpec
@@ -27,7 +28,7 @@ class StreamRunnerSpec
   }
 
   import impls._
-  import Implicits._
+  import com.bbva.pacarana.implicits.Implicits._
 
   def createSequenceHandler(
                              settings: Settings): (SequenceHandler[ExampleModel, ExampleDelta],

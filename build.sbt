@@ -1,10 +1,10 @@
-name := "sequence-handler-core"
+name := "pacarana"
 
-version := "0.3.1"
+version := "0.1.0"
 
 scalaVersion := "2.12.1"
 
-organization := "com.bbvalabs"
+organization := "com.bbva"
 
 val akkaVersion = "2.5.12"
 val logbackVersion = "1.2.3"
@@ -24,17 +24,6 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % Test,
   "org.scalatest" %% "scalatest" % "3.0.5" % Test
 )
-
-credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
-
-
-publishTo := {
-  val nexus = "https://globaldevtools.bbva.com/artifactory-api/"
-  if (isSnapshot.value)
-    Some("snapshots" at nexus + "innovation-labs-releases/") 
-  else
-    Some("releases"  at nexus + "innovation-labs-releases/")
-}
 
 artifact in (Compile, assembly) := {
   val art = (artifact in (Compile, assembly)).value

@@ -1,12 +1,17 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.runtime
 
 import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.scaladsl.Source
 import akka.stream.ActorMaterializer
-import com.bbvalabs.ai.runtime._
-import reactivemongo.api.collections.bson.BSONCollection
 
+import com.bbva.pacarana.implicits.Implicits
+import com.bbva.pacarana.model._
+import com.bbva.pacarana.parser.CSVConverter
+import com.bbva.pacarana.repository.Repository
+import com.bbva.pacarana.settings.Settings
+
+import reactivemongo.api.collections.bson.BSONCollection
 import scalaz.{Monoid, \/, _}
 import Scalaz._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -26,10 +31,6 @@ object SequenceHandlerStreamTrainer {
       io: String => IO[Unit],
       settings: Settings) = {
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
-
-    //val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
-    //val stdinSource: Source[String, NotUsed] =
-    //  Source.fromGraph(sourceGraph).async
 
     val sinkStream = as.actorOf(
       Props(new SinkActor[A](
@@ -51,10 +52,6 @@ object SequenceHandlerStreamRunner {
       io: String => IO[Unit],
       settings: Settings) = {
 
-    /*val sourceGraph: Graph[SourceShape[String], NotUsed] = new StdinSourceStage
-    val stdinSource: Source[String, NotUsed] =
-      Source.fromGraph(sourceGraph).async
-*/
     val taskSupervisor = as.actorOf(Props[TaskSupervisor])
     val sinkStream = as.actorOf(
       Props(new SinkActorRunner[A](settings,
@@ -232,11 +229,8 @@ trait SequenceHandler[A <: Model, B <: DeltaType] {
         process(h) flatMap { p =>
           p match {
             case AnySequence(id, deltas) => {
-              //val listmodel = t.map(_.model)
               val result =
-                processBatchinOneModel(t.map(_.model),
-                                       n + 1,
-                                       acc ++ List(deltas))
+                processBatchinOneModel(t.map(_.model), n + 1, acc ++ List(deltas))
               Task.suspend(result)
             }
             case NoSequence =>

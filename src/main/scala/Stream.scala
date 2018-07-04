@@ -1,4 +1,4 @@
-package com.bbvalabs.ai.runtime
+package com.bbva.pacarana.runtime
 
 import akka.NotUsed
 import akka.pattern.{after, ask}
@@ -7,7 +7,9 @@ import akka.stream._
 import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
 import akka.util.Timeout
 import akka.actor.{ActorRef, ActorSystem}
-import com.bbvalabs.ai._
+import com.bbva.pacarana.model.Model
+import com.bbva.pacarana.parser.CSVConverter
+import com.bbva.pacarana.settings.Settings
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -34,7 +36,7 @@ object StreamOps {
             if (str != null)
               push(out, str)
             else {
-              complete(out)
+              //complete(out)
             }
           }
         })
@@ -76,8 +78,8 @@ final class StreamTrainer[A <: Model, C](
   val stream = source
     .watchTermination()((_, f) => {
       f.onComplete {
-        case Success(e) => println("Success Exiting")
-        case Failure(err) => println("Error " + err)
+        case Success(e) =>  //TODO. add logger
+        case Failure(err) => //TODO. add logger
       }
     })
     .groupedWithin(settings.grouped, settings.milliss milliseconds)
@@ -94,8 +96,8 @@ final class StreamTrainer[A <: Model, C](
     .map(e => InputMsgs(e.sortBy(ford)))
     .watchTermination()((_, f) => {
       f.onComplete {
-        case Success(e) => println("Success Exiting II")
-        case Failure(err) => println("Error II " + err)
+        case Success(e) => //TODO. add logger
+        case Failure(err) => //TODO. add logger
       }
     })
     .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))
@@ -119,8 +121,8 @@ final class StreamRunner[A <: Model](settings: Settings, sink: ActorRef, source:
   val stream = source
     .watchTermination()((_, f) => {
       f.onComplete {
-        case Success(e) => println("Success Exiting")
-        case Failure(err) => println("Error " + err)
+        case Success(e) => //TODO. add logger
+        case Failure(err) => //TODO. add logger
       }
     })
     .groupedWithin(settings.grouped, settings.milliss milliseconds)
@@ -137,8 +139,8 @@ final class StreamRunner[A <: Model](settings: Settings, sink: ActorRef, source:
     .map(e => InputMsgsRunner(e) )
     .watchTermination()((_, f) => {
       f.onComplete {
-        case Success(e) => println("Success Exiting II")
-        case Failure(err) => println("Error II " + err)
+        case Success(e) => //TODO. add logger
+        case Failure(err) => //TODO. add logger
       }
     })
     .to(Sink.actorRefWithAck(sink, initMessage, ackMessage, completeMessage))

@@ -1,10 +1,14 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.parser
 
 /**
   * Created by Emiliano Martinez on 22/2/17. Based on Miles Sabins sample from
   * Shapeless repository. Added type instance for Float.
   * TODO: In future DateTimes will be added.
   */
+import java.text.SimpleDateFormat
+import java.util.Date
+
+import com.bbva.pacarana.model.Model
 import shapeless._
 
 import scala.collection.immutable.{:: => Cons}
@@ -29,6 +33,14 @@ object CSVConverter {
       def from(s: String): Try[String] = Success(s)
 
       def to(s: String): String = s
+    }
+
+  val sdf = new SimpleDateFormat("yyyy-MM-dd")
+
+  implicit def dateCSVConverter : CSVConverter[Date] =
+    new CSVConverter[Date] {
+      def from(s: String): Try[Date] = Success(sdf.parse(s))
+      def to(s: Date): String = s.toString
     }
 
   implicit def intCsvConverter: CSVConverter[Int] = new CSVConverter[Int] {

@@ -1,8 +1,12 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.tests
 
 import akka.actor.ActorSystem
-import com.bbvalabs.ai.Implicits.as
-import com.bbvalabs.ai._
+import com.bbva.pacarana.model.{AnySequence, DeltaModel2, DeltaType, Model}
+import com.bbva.pacarana.parser.CSVConverter
+import com.bbva.pacarana.repository.Repository
+import com.bbva.pacarana.runtime.SequenceHandler
+import com.bbva.pacarana.settings.Settings
+
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
@@ -48,7 +52,7 @@ class SequenceHandlerSpec
   def createSequenceHandler(lns: Lens[ExampleModel, String]): (SequenceHandler[ExampleModel, ExampleDelta],
     Repository[ExampleModel, ExampleDelta]) = {
     import impls._
-    import Implicits._
+    import com.bbva.pacarana.implicits.Implicits._
 
     implicit val settings = new Settings
     implicit def append(_new: ExampleModel,

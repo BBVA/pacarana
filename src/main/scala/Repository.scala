@@ -1,5 +1,7 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.repository
 
+import com.bbva.pacarana.model._
+import com.bbva.pacarana.mongo.conf.MongoConf
 import reactivemongo.api.DefaultDB
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.bson.{BSONDocument, BSONDocumentHandler}
@@ -10,13 +12,6 @@ import shapeless.Lens
 
 import scala.concurrent.{ExecutionContext, Future}
 
-/** A class which provides Mongo access. Only three functions which are needed
-  * by the Sequencer.
-  *  @model: Indicates the collection name to create for one model
-  *
-  *  @author  Emiliano Martinez
-  *  @date  17/03/2017
-  */
 class Repository[A <: Model, B <: DeltaType](
     implicit val lift: BSONDocumentHandler[AnySequence[A, B]],
     ec: ExecutionContext,

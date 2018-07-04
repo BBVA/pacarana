@@ -1,4 +1,4 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.settings
 
 import com.typesafe.config.{Config, ConfigFactory}
 

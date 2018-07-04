@@ -1,10 +1,8 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.mongo.conf
 
 import com.typesafe.config.{Config, ConfigFactory}
 
-import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api._
-import reactivemongo.core.nodeset.Authenticate
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}

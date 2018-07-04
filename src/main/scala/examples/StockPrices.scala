@@ -1,24 +1,24 @@
-package com.bbvalabs.ai.examples
+package com.bbva.pacarana.examples.stockprices
 
-import com.bbvalabs.ai.Implicits.{Aggregate, Output, SimpleAppend, SimpleDelta}
-import com.bbvalabs.ai._
+import java.util.Date
+
+import com.bbva.pacarana.implicits.Sources
+import com.bbva.pacarana.model.{DeltaType, Model}
+import com.bbva.pacarana.parser.CSVConverter
+import com.bbva.pacarana.runtime.{SequenceHandler, SequenceHandlerStreamRunner, SequenceHandlerStreamTrainer}
+import com.bbva.pacarana.settings.Settings
+
 import reactivemongo.bson.{BSONDocumentHandler, derived}
 
 import scala.concurrent.{Await, Future}
 import scalaz.effect.IO
 
-// This import is mandatory
+case class StockPrice(id: String, date: Date, Open: Double, High: Double, Low: Double, Close: Double, Volume: Double, OpenInt: Double) extends Model
+case class DeltaValue(window: List[Double], avg: Double, expMovingAvg: Double) extends DeltaType
 
-/**
-  * This example creates a new field with the last five days average as
-  * a new field. The model that must have the same fields as your CSV. The
-  * another type is used to generate new fields
-  */
+case class SettingsForWindow(override val entries: Int = 5) extends Settings
 
-
-case class StockPrice(id: String, Date: String, Open: Double, High: Double, Low: Double, Close: Double, Volume: Double, OpenInt: Double) extends Model
-case class DeltaValue(window: List[Double], avg: Double) extends DeltaType
-
+import com.bbva.pacarana.implicits.Implicits._
 
 object implicits {
   implicit val modelparser = CSVConverter[StockPrice]
@@ -26,29 +26,24 @@ object implicits {
     derived.codec[StockPrice]
   implicit val deltatomongo : BSONDocumentHandler[DeltaValue] =
     derived.codec[DeltaValue]
-
-  implicit val _settings : Settings = new Settings
 }
 
-object StreamParameters extends SimpleAppend[StockPrice, DeltaValue] with Output[StockPrice, DeltaValue]{
+class SeqHandlerParameters(implicit settings: Settings) extends SimpleAppend[StockPrice, DeltaValue] with Output[StockPrice, DeltaValue]{
 
   import implicits._
-  import Implicits._
   import shapeless._
 
   // This is the aggregation funtion that will be executed for each incomming event
   implicit val modelname : String = "model"
   implicit val field = lens[StockPrice] >> 'id
-  implicit val initDelta : DeltaValue = DeltaValue(Nil,0)
+  implicit val initDelta : DeltaValue = DeltaValue(Nil,0,0)
 
   def output(_new: (StockPrice, DeltaValue)): String = {
     _new match {
       case (birthmodel, aggregated) =>
-        s"${birthmodel.id},${birthmodel.Open},${aggregated.avg}"
+        s"${birthmodel.id},${birthmodel.date},${birthmodel.Open},${aggregated.avg},${aggregated.expMovingAvg}"
     }
   }
-
-  val sh : Future[SequenceHandler[StockPrice, DeltaValue]] = SequenceHandler[StockPrice, DeltaValue]
 
   override def fullAppend(_newTuple: (StockPrice, DeltaValue), lastTuple: (StockPrice, DeltaValue)): (StockPrice, DeltaValue) = {
 
@@ -57,35 +52,70 @@ object StreamParameters extends SimpleAppend[StockPrice, DeltaValue] with Output
     val storedWindow  = lastTuple._2.window
 
     val updatedWindow = newStockPrice.Open :: storedWindow
+
     val rotateWindow  = if(updatedWindow.length > 5) {
       updatedWindow.dropRight(1)
     } else updatedWindow
 
     val movingAverage = rotateWindow.sum / rotateWindow.size
 
-    (newStockPrice, DeltaValue(rotateWindow, movingAverage) )
+    // Calculate exp. moving average
+    // EMAt = α x current price + (1- α) x EMAt-1. Alpha 0.7
+    val expMovingAverage = 0.7 * newStockPrice.Open + ((1 - 0.7) * lastTuple._2.expMovingAvg)
+    (newStockPrice, DeltaValue(rotateWindow, movingAverage, expMovingAverage) )
+  }
+
+  val sh : Future[SequenceHandler[StockPrice, DeltaValue]] = SequenceHandler[StockPrice, DeltaValue]
+
+}
+
+object SequHandlerConf {
+  import scala.concurrent.duration._
+
+  implicit def dateTimeOrdering: Ordering[Date] = Ordering.fromLessThan((a, b) => a.getTime < b.getTime)
+  implicit def sortBy(_new: StockPrice): Date = _new.date
+
+  def getSequenceHandler(implicit settings: Settings): SequenceHandler[StockPrice, DeltaValue] = {
+    implicit def io: String => IO[Unit] =
+      str =>
+        IO {
+          println(str)
+        }
+
+    Await.result(new SeqHandlerParameters().sh, 10 seconds)
   }
 }
 
+object SimpleSettings {
+  implicit val settings = new Settings
+}
+
+object WindowSettings {
+  implicit val settings = new SettingsForWindow()
+}
 
 object StockPrices extends App {
+  import SequHandlerConf._
 
-  import Implicits._
-  import scala.concurrent.duration._
-
-  implicit def io: String => IO[Unit] =
-    str =>
-      IO {
-        println(str)
-      }
-
-  implicit def sortBy(_new: StockPrice): String = _new.Date
-  implicit val settings = new Settings()
-
+  // there is no need in label
   def label(_new: StockPrice): String = ""
 
-  val sh = Await.result(StreamParameters.sh, 10 seconds)
+  val option = sys.env("MODE")
 
-  SequenceHandlerStreamTrainer[StockPrice, String](sh :: Nil, Sources.stdinSource, label _)
+  option match {
+    case "TRAIN" => {
+      import SimpleSettings._
+      SequenceHandlerStreamTrainer[StockPrice, Date] (getSequenceHandler(settings) :: Nil, Sources.stdinSource, label _)
+    }
+    case "RUN"   => {
+      import SimpleSettings._
+      SequenceHandlerStreamRunner(getSequenceHandler(settings) :: Nil, Sources.stdinSource)
+    }
+    case "WINDOW" => {
+      import WindowSettings._
+      SequenceHandlerStreamTrainer[StockPrice, Date] (getSequenceHandler(settings) :: Nil, Sources.stdinSource, label _)
+    }
+  }
 
 }
+

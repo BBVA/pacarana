@@ -1,6 +1,8 @@
-# Sequencer Handler
+# PACARANA
 
-Sequencer module allows to add more features based on previous events and creating time series that could be used for machine learning experiments. It´s based on an Akka Stream Source which reads from the standard input and prints to the standard output. It provides a completed abstraction for working with different event topologies.
+Pacarana was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might provide aditional features related to an entity. For example, in a bank operations dataset we could obtain new features like time interval between operations for each card or the exponential moving average for one company in the stock market.
+
+It´s based on an Akka Stream and offers a built in **Source Stage** to read from the standard input and print to the standart output stream, althoug it´s configurable with a Scalaz Effect IO. 
 
 # Schema  
 
@@ -18,38 +20,47 @@ Sequencer module allows to add more features based on previous events and creati
                      |                                |             
                       --------------------------------    
 
-# Application Sample
+At the moment it only accepts comma delimited CSV input files, and requires MongoDB to persist the information
 
-For example, if we have a dataset that represent card operations like these:
+# Application Example
+
+if we had a dataset with card operations like these:
 
 ***cardId,amount,timestamp,logitude,latitude,merchantId,label***
-9992929,1000,1000,40.71,-74.00,200,1.0
-9992930,1000,1000,41.01,-74.57,200,1.0
-9992932,1000,1000,40.86,-74.95,200,1.0
+XX0,1000,1000,40.71,-74.00,200,1.0
+XX1,1000,1000,41.01,-74.57,200,1.0
+XX2,1000,1000,40.86,-74.95,200,1.0
 
-It´s necessary to create two datatypes:
+These are steps to follow to create the stream:
+
+1. Create two data types. Pacarana needs that the information to be represented as two Scala **case clases**, the first is to represent the incoming event and must have as many members as columns has the CSV. The second one is for the aditional info which is goint to be created as long the stream progresses.  
 
 ```scala
-case class Transaction(id: String,
-                       amount: Double,
-                       timestamp: Long,
-                       long: Double,
-                       lat: Double,
-                       center: Int,
-                       label: Option[Double])
-    extends Model
+case class Transaction(id: String, amount: Double, timestamp: Long, long: Double, lat: Double, center: Int, label: Option[Double]) extends Model
 
-case class TemporalFeaturesByCard(amountDiff: Double,
-                                  timeBetweenOp: Double,
-                                  diffPos: Double)
-    extends DeltaType
+case class TemporalFeaturesByCard(amountDiff: Double,timeBetweenOp: Double, diffPos: Double) extends DeltaType
 ```
 
-The **Transaction** type must have the same fields as the input CSV line. The other is used to create new features that can be useful in a machine learning training process.
+Sequences are created by a concrete field of the model which is pointed by the *id* member. For example: if you need temporal data of card operations such as the difference of amount between operations it must be computed for each card. Thereby multiples sequences are created in form of MongoDB documents, as many as different cards are part of the dataset. Note that you need to put your *id* as the first member of the case class. 
 
-Sequences are created by a concrete field of the model. For example: if you need temporal data of card operations such as the difference of amount between operations it must be computed for each card. Thereby multiples sequences are created, many as different cards are part of the experiment.  
+2. Pacarana uses **type class derivation from shapeless** for the CSV parser and for the MongoDB codecs so you need to declare three implicits in scope:
 
-It has dependency on a MongoDB running installation to store all data related to sequences. By default, the URL **localhost:27017** is used.
+
+```scala
+  implicit val modelparser = CSVConverter[Transaction]
+  implicit val modeltomongo : BSONDocumentHandler[Transaction] =
+    derived.codec[Transaction]
+  implicit val deltatomongo : BSONDocumentHandler[TemporalFeaturesByCard] =
+    derived.codec[TemporalFeaturesByCard]
+```
+
+
+3. Declare a **Sequence Handler**. Each stream is composed by multiple sequence handlers which apply a function to a pair or more events in a monoidal fashion. The main sequence handler uses the field **id**. To make the things easier it is provided several traits that you can extend from to build your sequence handler:
+ 
+
+
+It has dependency on a MongoDB running installation to store all data related to sequences. By default, the URL **localhost:27017** is used. 
+
 
 To create the experiment your app should extends from different traits depending on how you want to deal with your data.  
 

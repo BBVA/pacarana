@@ -1,15 +1,13 @@
-package com.bbvalabs.ai.test
+package com.bbva.pacarana.tests
 
 import akka.actor.Props
 import akka.stream.scaladsl.Source
-import com.bbvalabs.ai.Implicits.as
-import com.bbvalabs.ai.runtime.TaskSupervisor
-import com.bbvalabs.ai._
 import org.scalatest.{Matchers, WordSpecLike}
 import shapeless.lens
 
 import scalaz.effect.IO
-import Implicits._
+import com.bbva.pacarana.implicits.Implicits._
+import com.bbva.pacarana.runtime.{SequenceHandlerStreamRunner, SequenceHandlerStreamTrainer, TaskSupervisor}
 import impls._
 
 class SequenceHandlerStreamSpec extends WordSpecLike with Matchers {

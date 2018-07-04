@@ -1,5 +1,8 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.tests
 
+import com.bbva.pacarana.model._
+import com.bbva.pacarana.parser.CSVConverter
+import com.bbva.pacarana.repository.Repository
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, WordSpecLike}
@@ -10,6 +13,8 @@ import reactivemongo.bson.{BSONDocumentHandler, derived}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scalaz.concurrent.Task
+
+import com.bbva.pacarana.implicits.Implicits._
 
 @RunWith(classOf[JUnitRunner])
 class MongoRepoSpec
@@ -38,7 +43,7 @@ class MongoRepoSpec
   private def createNewSequence(
       id: String): Task[Sequence[ExampleModel, ExampleDelta]] = {
 
-    import Implicits._, implicits._
+    import com.bbva.pacarana.implicits.Implicits._, implicits._
     val repo = new Repository[ExampleModel, ExampleDelta]()
 
     implicit val col =
@@ -53,7 +58,7 @@ class MongoRepoSpec
 
   "A Mongo implementation giving a Model and a Delta" should "add a new sequence" in {
 
-    import Implicits._, implicits._
+    import implicits._
 
     val repo = new Repository[ExampleModel, ExampleDelta]()
 
@@ -78,7 +83,7 @@ class MongoRepoSpec
 
   "A Mongo implementation giving a Model and a Delta" should "update an existing sequence" in {
 
-    import Implicits._, implicits._
+    import com.bbva.pacarana.implicits.Implicits._, implicits._
     val repo = new Repository[ExampleModel, ExampleDelta]()
 
     implicit val col =

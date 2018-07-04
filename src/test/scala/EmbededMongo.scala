@@ -1,4 +1,4 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.tests
 
 import de.flapdoodle.embed.mongo.config.{ MongodConfigBuilder, Net, RuntimeConfigBuilder }
 import de.flapdoodle.embed.mongo.distribution.Version

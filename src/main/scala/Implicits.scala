@@ -1,13 +1,17 @@
-package com.bbvalabs.ai
+package com.bbva.pacarana.implicits
 
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 import akka.stream.{ActorMaterializer, Graph, SourceShape}
-import com.bbvalabs.ai.runtime.{InputMsgs, InputMsgsRunner}
+import com.bbva.pacarana.model.SequencerTypes.{DataForRun, DataForTrain}
+import com.bbva.pacarana.model._
+import com.bbva.pacarana.parser.CSVConverter
+import com.bbva.pacarana.repository.Repository
+import com.bbva.pacarana.runtime.{InputMsgs, InputMsgsRunner}
+import com.bbva.pacarana.runtime.StreamOps.StdinSourceStage
+import com.bbva.pacarana.settings.Settings
 import reactivemongo.bson.{BSONDocumentHandler, derived}
-import com.bbvalabs.ai.SequencerTypes.{DataForRun, DataForTrain}
-import com.bbvalabs.ai.runtime.StreamOps.StdinSourceStage
 
 import scala.concurrent.ExecutionContext
 import scalaz.effect.IO
@@ -37,7 +41,7 @@ object Implicits {
   }
 
   implicit def repoInstance[A <: Model, B <: DeltaType](
-      implicit handler: BSONDocumentHandler[com.bbvalabs.ai.AnySequence[A, B]],
+      implicit handler: BSONDocumentHandler[AnySequence[A, B]],
       ec: ExecutionContext,
       model: String): Repository[A, B] =
     new Repository[A, B]

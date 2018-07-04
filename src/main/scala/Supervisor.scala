@@ -1,10 +1,7 @@
-package com.bbvalabs.ai.runtime
+package com.bbva.pacarana.runtime
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
 
-/**
-  * Created by e049627 on 5/6/17. This actor checks if all tasks have been executed
-  */
 case class AckBox(total: Int, n: Int, ref: ActorRef)
 
 final class TaskSupervisor extends Actor with ActorLogging {

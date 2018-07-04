@@ -1,19 +1,21 @@
-package com.bbvalabs.ai.test
+package com.bbva.pacarana.tests
 
 import akka.actor.{ActorSystem, Props}
-import com.bbvalabs.ai._
-import org.scalatest.{Matchers, WordSpecLike}
-import com.bbvalabs.ai.Implicits._
-import com.bbvalabs.ai.runtime._
 import akka.util.Timeout
-import shapeless.lens
 import akka.pattern.ask
+import com.bbva.pacarana.implicits.Implicits
+import com.bbva.pacarana.repository.Repository
+import com.bbva.pacarana.runtime._
+import com.bbva.pacarana.settings.Settings
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import org.scalatest.{Matchers, WordSpecLike}
 
 import scala.concurrent.duration._
 import scala.concurrent.Await
 import scalaz.effect.IO
+import Implicits._
+import shapeless.lens
 
 @RunWith(classOf[JUnitRunner])
 class SinkActorSpec
@@ -21,9 +23,10 @@ class SinkActorSpec
 
   def createSequenceHandler(settings: Settings): (SequenceHandler[ExampleModel, ExampleDelta],
     Repository[ExampleModel, ExampleDelta]) = {
+
     import impls._
 
-    import Implicits._
+    import com.bbva.pacarana.implicits.Implicits._
     implicit val _settings = settings
 
     implicit def append(_new: ExampleModel,
