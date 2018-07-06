@@ -1,4 +1,4 @@
-package com.bbva.pacarana.implicits
+package com.bbva.pacarana
 
 import akka.NotUsed
 import akka.actor.ActorSystem

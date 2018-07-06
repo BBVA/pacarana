@@ -52,7 +52,7 @@ class SequenceHandlerSpec
   def createSequenceHandler(lns: Lens[ExampleModel, String]): (SequenceHandler[ExampleModel, ExampleDelta],
     Repository[ExampleModel, ExampleDelta]) = {
     import impls._
-    import com.bbva.pacarana.implicits.Implicits._
+    import com.bbva.pacarana.Implicits._
 
     implicit val settings = new Settings
     implicit def append(_new: ExampleModel,

@@ -2,7 +2,7 @@ package com.bbva.pacarana.tests
 
 import akka.actor.Props
 import akka.stream.scaladsl.Source
-import com.bbva.pacarana.implicits.Implicits
+import com.bbva.pacarana.Implicits
 import com.bbva.pacarana.repository.Repository
 import com.bbva.pacarana.runtime.{SequenceHandler, SinkActor, StreamTrainer, TaskSupervisor}
 import com.bbva.pacarana.settings.Settings
@@ -22,7 +22,7 @@ class FakeSettings(nentries: Int) extends Settings {
 
 
 import impls._
-import com.bbva.pacarana.implicits.Implicits._
+import com.bbva.pacarana.Implicits._
 
 object streamCommons {
   def createSequenceHandler(settings: Settings, f: (ExampleModel, ExampleModel) => ExampleDelta)(implicit  lns: Lens[ExampleModel, String], col : String): (SequenceHandler[ExampleModel, ExampleDelta],

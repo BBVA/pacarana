@@ -2,7 +2,7 @@ package com.bbva.pacarana.examples.stockprices
 
 import java.util.Date
 
-import com.bbva.pacarana.implicits.Sources
+import com.bbva.pacarana.Sources
 import com.bbva.pacarana.model.{DeltaType, Model}
 import com.bbva.pacarana.parser.CSVConverter
 import com.bbva.pacarana.runtime.{SequenceHandler, SequenceHandlerStreamRunner, SequenceHandlerStreamTrainer}
@@ -18,7 +18,7 @@ case class DeltaValue(window: List[Double], avg: Double, expMovingAvg: Double) e
 
 case class SettingsForWindow(override val entries: Int = 5) extends Settings
 
-import com.bbva.pacarana.implicits.Implicits._
+import com.bbva.pacarana.Implicits._
 
 object implicits {
   implicit val modelparser = CSVConverter[StockPrice]

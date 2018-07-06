@@ -14,7 +14,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scalaz.concurrent.Task
 
-import com.bbva.pacarana.implicits.Implicits._
+import com.bbva.pacarana.Implicits._
 
 @RunWith(classOf[JUnitRunner])
 class MongoRepoSpec
@@ -43,7 +43,7 @@ class MongoRepoSpec
   private def createNewSequence(
       id: String): Task[Sequence[ExampleModel, ExampleDelta]] = {
 
-    import com.bbva.pacarana.implicits.Implicits._, implicits._
+    import com.bbva.pacarana.Implicits._, implicits._
     val repo = new Repository[ExampleModel, ExampleDelta]()
 
     implicit val col =
@@ -83,7 +83,7 @@ class MongoRepoSpec
 
   "A Mongo implementation giving a Model and a Delta" should "update an existing sequence" in {
 
-    import com.bbva.pacarana.implicits.Implicits._, implicits._
+    import com.bbva.pacarana.Implicits._, implicits._
     val repo = new Repository[ExampleModel, ExampleDelta]()
 
     implicit val col =

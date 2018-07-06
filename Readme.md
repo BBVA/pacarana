@@ -1,362 +1,317 @@
-# PACARANA
-
-Pacarana was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might provide aditional features related to an entity. For example, in a bank operations dataset we could obtain new features like time interval between operations for each card or the exponential moving average for one company in the stock market.
-
-It´s based on an Akka Stream and offers a built in **Source Stage** to read from the standard input and print to the standart output stream, althoug it´s configurable with a Scalaz Effect IO. 
-
-# Schema  
-
-     -------------         ---------------------             --------------------
-    | Event     1 | Stdin |     Akka Stream     |  Stdout  | Transformed Event 1  |
-    | Event     2 | ----> |                     |  ----->  | Transformed Event 2  |
-    |             |       |       JVM           |          |                      |
-    | ....        |       |                     |          | ....                 |
-     -------------         --------------------              -------------------
-                                   |                                        
-                                   |                                         
-                                   \/                                        
-                      --------------------------------            
-                     |   MongoDB                      |         
-                     |                                |             
-                      --------------------------------    
-
-At the moment it only accepts comma delimited CSV input files, and requires MongoDB to persist the information
-
-# Application Example
-
-if we had a dataset with card operations like these:
-
-***cardId,amount,timestamp,logitude,latitude,merchantId,label***
-XX0,1000,1000,40.71,-74.00,200,1.0
-XX1,1000,1000,41.01,-74.57,200,1.0
-XX2,1000,1000,40.86,-74.95,200,1.0
-
-These are steps to follow to create the stream:
-
-1. Create two data types. Pacarana needs that the information to be represented as two Scala **case clases**, the first is to represent the incoming event and must have as many members as columns has the CSV. The second one is for the aditional info which is goint to be created as long the stream progresses.  
-
-```scala
-case class Transaction(id: String, amount: Double, timestamp: Long, long: Double, lat: Double, center: Int, label: Option[Double]) extends Model
-
-case class TemporalFeaturesByCard(amountDiff: Double,timeBetweenOp: Double, diffPos: Double) extends DeltaType
+# PACARANA  
+  
+**Pacarana** was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might provide aditional features for training processes. For example, in a bank operations dataset we could obtain new features like time interval between operations for each card or the exponential moving average of one company´s price in the stock market.  
+  
+It´s based on an Akka Stream and offers a built in **Source Stage** to read from the standard input and print to the standart output stream, although it´s configurable with the Scalaz Effect IO.   
+  
+At the moment it only accepts **comma delimited CSV** input files, and requires MongoDB.  Events in **Pacarana** must enter ordered in time.
+  
+  
+# Application Example  
+  
+To show how it works, we start from a CSV dataset with some labeled fraudulent or not fraudulent card operations:  
+```text  
+cardId,amount,timestamp,logitude,latitude,merchantId,label  
+XX0,1000,1000,40.71,-74.00,2238847,1.0  
+XX1,1000,1000,41.01,-74.57,8838372,1.0  
+XX2,1000,1000,40.86,-74.95,2363739,1.0  
+....  
+```  
+  
+From this dataset we need to calcule three additional features between two operations of the same card:  
+ * The amount diference.  
+ * The location distance.  
+ * The elapsed time.  
+  
+These are steps to follow to configure the stream:  
+  
+1. Create two data types . **Pacarana** needs that the information to be represented as two Scala **case clases**, the first is to represent the incoming event and must have as many members as columns has the CSV. The second one is for the new info which is going to be created as long the stream progresses.  Both data types must extend from **Model** and **DeltaType** traits respectively.   
+  
+```scala  
+case class Transaction(id: String, amount: Double, timestamp: Long, long: Double, lat: Double, center: Int, label: Option[Double]) extends Model  
+  
+case class TemporalFeaturesByCard(amountDiff: Double, timeBetweenOp: Double, diffPos: Double) extends DeltaType  
 ```
-
-Sequences are created by a concrete field of the model which is pointed by the *id* member. For example: if you need temporal data of card operations such as the difference of amount between operations it must be computed for each card. Thereby multiples sequences are created in form of MongoDB documents, as many as different cards are part of the dataset. Note that you need to put your *id* as the first member of the case class. 
-
-2. Pacarana uses **type class derivation from shapeless** for the CSV parser and for the MongoDB codecs so you need to declare three implicits in scope:
-
-
-```scala
-  implicit val modelparser = CSVConverter[Transaction]
-  implicit val modeltomongo : BSONDocumentHandler[Transaction] =
-    derived.codec[Transaction]
-  implicit val deltatomongo : BSONDocumentHandler[TemporalFeaturesByCard] =
-    derived.codec[TemporalFeaturesByCard]
-```
-
-
-3. Declare a **Sequence Handler**. Each stream is composed by multiple sequence handlers which apply a function to a pair or more events in a monoidal fashion. The main sequence handler uses the field **id**. To make the things easier it is provided several traits that you can extend from to build your sequence handler:
+  
+The main sequences are created by the *id* member. In this case, the **id** must be in the first place which corresponds to the card id.   
+  
+2. **Pacarana** uses **type class derivation from shapeless** for the CSV parser and for the **MongoDB codecs** so you need to declare three implicits in scope:
+  
+```scala  
+// You must import this  
+import com.bbva.pacarana.Implicits._  
+```  
+  
+```scala  
+object Codecs {  
+ implicit val modelparser = CSVConverter[Transaction]
+ implicit val modeltomongo : BSONDocumentHandler[Transaction] = derived.codec[Transaction]
+ implicit val deltatomongo : BSONDocumentHandler[TemporalFeaturesByCard] = derived.codec[TemporalFeaturesByCard]}  
+```  
+  
+3. Declare a **Sequence Handler**. To make the things easier it several traits you can extend from to implements the required functions: SimpleDelta, Aggregate, SimpleAppend, SimpleAppendWithSerie. In this example we will use **SimpleAppend** and **Output** traits: 
+```scala  
+object SequenceHandlerFunctions  
+    extends SimpleAppend[Transaction, TemporalFeaturesByCard] with Output[Transaction, TemporalFeaturesByCard] {  
+  
+  import math._  
+  
+  case class Location(lat: Double, lon: Double)  
+  
+  private val AVERAGE_RADIUS_OF_EARTH_KM = 6371  
+  
+  /* Taken from https://shiv4nsh.wordpress.com/2017/12/01/scala-calculating-distance-between-two-locations/ */  
+  private def calculateDistanceInKilometer(userLocation: Location, warehouseLocation: Location): Int = {  
+    val latDistance = Math.toRadians(userLocation.lat - warehouseLocation.lat)  
+    val lngDistance = Math.toRadians(userLocation.lon - warehouseLocation.lon)  
+    val sinLat = Math.sin(latDistance / 2)  
+    val sinLng = Math.sin(lngDistance / 2)  
+    val a = sinLat * sinLat +  
+      (Math.cos(Math.toRadians(userLocation.lat))  
+        * Math.cos(Math.toRadians(warehouseLocation.lat))  
+        * sinLng * sinLng)  
+    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))  
+    (AVERAGE_RADIUS_OF_EARTH_KM * c).toInt  
+  }  
+  
+  
+  implicit class calculateDistance(in: (Double, Double)) {  
+    def - (that: (Double, Double)): Double = {  
+      calculateDistanceInKilometer(Location(in._2, in._1), Location(that._2, that._1))  
+    }  
+  }  
+  
+  /** Implement this!! **/  
+  override def fullAppend(_newTuple: (Transaction, TemporalFeaturesByCard),  
+                          lastTuple: (Transaction, TemporalFeaturesByCard))  
+    : (Transaction, TemporalFeaturesByCard) =  
+    (_newTuple, lastTuple) match {  
+      case ((newModel, newDelta), (lastModel, lastDelta)) => {  
+        (newModel, {  
+          // Calculate the new dynamic data  
+  val newPosition   = (newModel.long, newModel.lat)  
+          val lastPosition  = (lastModel.long, lastModel.lat)  
+          val diffAmount    = newModel.amount - lastModel.amount  
+          val diffTimestamp = newModel.timestamp - lastModel.timestamp  
+          val diffLocation  = newPosition - lastPosition  
+          // Return a new object with the these new fields to be sent to the output stream  
+  TemporalFeaturesByCard(diffAmount, diffTimestamp, diffLocation)  
+        })  
+      }  
+    }  
+  
+  override def output(_new: (Transaction, TemporalFeaturesByCard)): String =  
+    s"${_new._1.id},${_new._1.amount},${_new._1.center},${_new._2.amountDiff},${_new._2.diffPos},${_new._2.timeBetweenOp}"  
+}  
+```  
+  
+For configuring the sequence you must include:  
+ * One **shapeless lens** for your **id** field.  
+ * One **model name** which is going to be the MongoDB collection name.  
+ * One **TemporalFeaturesByCard** instance for initialization.   
+ * The **output** for this sequence handler is configured by the Scalaz IO. In this case it just print the new enriched event to the console.  
+ * And finally one Settings instance which is used to configure some stream features. You can declare your own setting extending the Settings class and overriding the values otherwise it will use the ***aggregator*** section from the ***application.conf*** file.  
+  
+```scala  
+object SequenceHandlerConf {  
+ import shapeless._   // field for which the sequence is going to be created  
+ implicit val _lens = lens[Transaction] >> 'id  
+ // Mongo collection to store the collection implicit val model : String = "sq"  
+ // Init delta value implicit val initDelta = TemporalFeaturesByCard(0,0,0)  
+ implicit def io: String => IO[Unit] = str => IO { println(str) }   implicit val settings = new Settings  
+}  
+```  
+  
+Then define your sequence handler:  
+  
+```scala  
+object SequenceHandlerDefinition {  
+ val sh: Future[SequenceHandler[Transaction, TemporalFeaturesByCard]] =  SequenceHandler[Transaction, TemporalFeaturesByCard]}  
+}
+```  
+  
+Because this software was created thinking in machine learning projects some of the terminology is closely **related to the ML ecosystem**. To declare the stream you can choose if you want to start in ***training*** mode or in ***running*** mode. The only difference between the two is that the running mode **expects a transaction identifier** as the first field and bypass it to the output. This mode allows to include **Pacarana** in a **prediction pipeline**.   
+  
+Before the stream starts, it is needed to define additional properties for it:  
+  
+ * Your **label** function which takes one field of your model and put it at the output's end.   
+ * The **sortBy** function wich indicates what field from the Model is used to short the incoming events. It is necessary if you configure your **groupedBy** property > 1 to avoid a possible event disorder.  
+ * The parameters needed for starting the stream are the **handlers** list(in this case only one), the **built in stdinSource** available, and the **label** function.   
+  
+The two parameter types correspond to the **Transaction** and the field type from which the **order** is performed, in this case the field timestamp type, a Long .  
+   
+The SequenceHandler constructor returns a Scala Future which completes once it is initialized and **connected with the MongoDB database**. When it is ready you can start the stream invoking the stream constructor with the following parameters:  
  
+```scala  
+object InitStream extends App {  
+ import SequenceHandlerConf._ import SequenceHandlerDefinition._ def label(_new: Transaction): String = _new.label.get.toString   implicit def sortBy(_new: Transaction): Double = _new.timestamp  
+  
+ sh onComplete { case Success(handler) => { SequenceHandlerStreamTrainer[Transaction, Long](handler :: Nil, Sources.stdinSource, label _)  
+ } case _ => System.exit(-1) }}  
+```  
+   
+Once the stream is created it reads from the **Stdin**. For example if the incoming events are:  
+  
+```  
+CARD000000000,200.0,10000000000,-3.70325,40.4167,1002,0.0  
+CARD000000000,200.0,10000000000,-73.9385,40.6643,1022,0.0  
+CARD000000000,200.0,10000000000,-73.9385,40.6643,1022,1.0  
+CARD000000001,200.0,10000000000,-3.70325,40.4167,1002,0.0  
+CARD000000001,200.0,10000000000,-73.9385,40.6643,1022,0.0  
+CARD000000002,200.0,10000000000,-73.9385,40.6643,1022,0.0  
+```  
+  
+in our example the output configured by the **output** function will be:  
+  
+```  
+200.0,1002,0.0,0.0,0.0,0.0  
+200.0,1022,0.0,7809.0,0.0,0.0  
+200.0,1022,0.0,0.0,0.0,1.0  
+200.0,1002,0.0,0.0,0.0,0.0  
+200.0,1022,0.0,7809.0,0.0,0.0  
+200.0,1022,0.0,0.0,0.0,0.0  
+```  
+  
+## Building another Sequence Handler  
+  
+**Pacarana** allows to add another sequence handler that will process in parallel the incoming events for a different field. In this example we sequence by the merchantid to obtain what is the fraud average in the last n transactions. Just configure another sequence handler:  
+  
+```scala  
+  
+case class FraudIndexByMerchantId(fraudList: List[Double], average: Double) extends DeltaType
+  
+implicit val deltatomongo0 : BSONDocumentHandler[FraudIndexByMerchantId] = derived.codec[FraudIndexByMerchantId]   
 
-
-It has dependency on a MongoDB running installation to store all data related to sequences. By default, the URL **localhost:27017** is used. 
-
-
-To create the experiment your app should extends from different traits depending on how you want to deal with your data.  
-
-```scala
-trait SimpleAppend[A <: Model, B <: DeltaType] {
-  def fullAppend(_newTuple: (A, B), lastTuple: (A, B)): (A, B)
+object  SequenceHandlerForMerchantFunctions extends SimpleAppend[Transaction, FraudIndexByMerchantId] with Output[Transaction, FraudIndexByMerchantId] {  
+  override def fullAppend(_newTuple: (Transaction, FraudIndexByMerchantId), lastTuple: (Transaction, FraudIndexByMerchantId)): (Transaction, FraudIndexByMerchantId) = {  
+  
+    val newTransaction = _newTuple._1  
+    val storedFraudList = lastTuple._2.fraudList  
+  
+    val updatedWindow = newTransaction.label.get :: storedFraudList  
+  
+    val rotateWindow = if (updatedWindow.length > 100) {  
+      updatedWindow.dropRight(1)  
+    } else updatedWindow  
+  
+    val fraudIndex = rotateWindow.sum / rotateWindow.size  
+  
+    (newTransaction, FraudIndexByMerchantId(rotateWindow, fraudIndex.toFloat))  
+  }  
+  
+  override def output(_new: (Transaction, FraudIndexByMerchantId)): String = _new._2.average.toString  
+}
+  
+object  SequenceHandlerConfForMerchantId {  
+  
+  // field for which the sequence is going to be created  
+  implicit val _lens = lens[Transaction] >> 'center  
+  
+  // Mongo collection to store the collection  
+  implicit val model : String = "sq1"  
+  
+  // Init delta value  
+  implicit val initDelta = FraudIndexByMerchantId(Nil, 0.0)  
+  
+  implicit def io: String => IO[Unit] =  
+    str =>  
+      IO {  
+        println(str)  
+      }  
+  
+  implicit val settings = new Settings  
 }
 
-trait SimpleAppendWithSerie[A <: Model, B <: DeltaType] {
-  def fullAppend2(_newTuple: (A, B), storedSerie: List[(A, B)]): (A, B)
+object  SequenceHandlerDefinitionForMerchantId {  
+  import Codecs._  
+  import SequenceHandlerForMerchantFunctions._  
+  import SequenceHandlerConfForMerchantId._  
+  
+  val sh1: Future[SequenceHandler[Transaction, FraudIndexByMerchantId]] =  
+    SequenceHandler[Transaction, FraudIndexByMerchantId]  
 }
-
-```
-
-The difference lies in how you deal with your sequences. The **fullAppend** gives you the new and the last event with the associated "delta". If you choose to implement **SimpleAppendWithSerie** you can work with the stored serie of your data which is as long as the WINDOW_SIZE.
-
-Example:
-
-```scala
-// This represents a card movement
-case class Transaction(id: String,
-                       amount: Double,
-                       timestamp: Long,
-                       location: Array[Double],
-                       center: Int,
-                       label: Option[Double])
-    extends Model
-
-// and this for dynamic parameters as stream flows on
-case class DynamicFeaturesByCard(amountDiff: Double,
-                                 timeBetweenOp: Double,
-                                 diffPos: Double)
-    extends DeltaType
-```
-
-For this to be achieved, your app or object must extend some of the traits above:
-
-```scala
-
-object sq
-    extends SimpleAppend[Transaction, TemporalFeaturesByCard]
-    with Output[Transaction, TemporalFeaturesByCard]
-    {
-
-      def fullAppend(_newTransaction: (Transaction, TemporalFeaturesByCard),
-                     lastTransaction: (Transaction, TemporalFeaturesByCard))
-        : (Transaction, TemporalFeaturesByCard) = {
-        (_newTransaction, lastTransaction) match {
-          case ((newModel, newDelta), (lastModel, lastDelta)) => {
-            (newModel, {
-              // Calculate the new dynamic data
-              val newPosition   = (newModel.long, newModel.lat)
-              val lastPosition  = (lastModel.long, lastModel.lat)
-              val diffAmount    = lastModel.amount - newModel.amount
-              val diffTimestamp = lastModel.timestamp - newModel.timestamp
-              val diffLocation  = newPosition - lastPosition
-              // Return a new object with the these new fields to be sent to the output stream
-              TemporalFeaturesByCard(diffAmount, diffTimestamp, diffLocation)
-            })
-          }
-          case _ => _newTransaction
-        }
-    }
-```
-
-The compiler makes the object to implement the **fullAppend** function that will pass as arguments the new event and the last stored event. In this case the **Transaction** and  **TemporalFeaturesByCard** type.
-
-The **Output** trait contains the abstract method **output** to convert the resulting tuple into a string.  
-
-# Full Sample
-
-```scala
-// Codecs that will be created in compilation phase for CSV converter and MongoDB serializers
-object implicits {
-  implicit val tran1 =  CSVConverter[Transaction]
-  implicit val codec1 = derived.codec[Transaction]
-  implicit val codec2 = derived.codec[TemporalFeaturesByCard]
+```  
+  
+And start the stream with the two Sequence Handlers:  
+  
+```scala  
+object  InitStream extends App {  
+  import SequenceHandlerConf._  
+  import SequenceHandlerDefinition._  
+  import SequenceHandlerDefinitionForMerchantId._  
+  
+  def label(_new: Transaction): String = _new.label.get.toString  
+  
+  implicit def sortBy(_new: Transaction): Long = _new.timestamp  
+  
+  sh zip sh1 onComplete {  
+  
+  case Success((handler, handler1)) => {  
+     SequenceHandlerStreamTrainer[Transaction, Long](handler :: handler1 :: Nil, Sources.stdinSource, label _) }
+  case _ => System.exit(-1)  
+ }  
 }
-
-object sq5
-    extends SimpleAppend[Transaction, TemporalFeaturesByCard]
-    with Output[Transaction, TemporalFeaturesByCard] {
-
-  import implicits._
-  import shapeless._
-
-  import math._
-
-  def distance(xs: Array[Double], ys: Array[Double]) = {
-    sqrt((xs zip ys).map { case (x, y) => pow(y - x, 2) }.sum)
-  }
-
-  implicit class euclideanOperation(in: (Double, Double)) {
-    def - (that: (Double, Double)): Double = {
-      distance(Array(in._1, in._2), Array(that._1, that._2))
-    }
-  }
-
-  def fullAppend(_newTransaction: (Transaction, TemporalFeaturesByCard),
-                 lastTransaction: (Transaction, TemporalFeaturesByCard))
-    : (Transaction, TemporalFeaturesByCard) = {
-    (_newTransaction, lastTransaction) match {
-      case ((newModel, newDelta), (lastModel, lastDelta)) => {
-        (newModel, {
-          // Calculate the new dynamic data
-          val newPosition   = (newModel.long, newModel.lat)
-          val lastPosition  = (lastModel.long, lastModel.lat)
-          val diffAmount    = lastModel.amount - newModel.amount
-          val diffTimestamp = lastModel.timestamp - newModel.timestamp
-          val diffLocation  = newPosition - lastPosition
-          // Return a new object with the aggregated info to be sent to the output stream
-          TemporalFeaturesByCard(diffAmount, diffTimestamp, diffLocation)
-        })
-      }
-      case _ => _newTransaction
-    }
-  }
-
-  def output(_new: (Transaction, TemporalFeaturesByCard)): String =
-    s"${_new._1.amount},${_new._1.center},${_new._2.amountDiff},${_new._2.diffPos},${_new._2.timeBetweenOp}"
-
-  // field for which the sequence is going to be created
-  implicit val _lens = lens[Transaction] >> 'id
-
-  // Mongo collection to store the collection
-  implicit val model : String = "sq5"
-
-  // Init delta value
-  implicit val initDelta = TemporalFeaturesByCard(0,0,0)
-
-  val sh5: Future[SequenceHandler[Transaction, TemporalFeaturesByCard]] =
-    SequenceHandler[Transaction, TemporalFeaturesByCard]
-}
-
+```  
+  
+For an input like this:  
+  
+```text  
+CARD000000001,200.0,10000000004,-3.70325,40.4167,MERCHANT3,0.0  
+CARD000000001,200.0,10000000005,-73.9385,40.6643,MERCHANT3,1.0  
+CARD000000002,200.0,10000000006,-73.9385,40.6643,MERCHANT0,0.0  
+CARD000000000,200.0,10000000007,-3.70325,40.4167,MERCHANT0,0.0  
+CARD000000000,200.0,10000000008,-73.9385,40.6643,MERCHANT1,0.0  
+CARD000000000,200.0,10000000009,-73.9385,40.6643,MERCHANT3,1.0  
+CARD000000001,200.0,10000000010,-3.70325,40.4167,MERCHANT3,0.0  
+CARD000000001,200.0,10000000011,-73.9385,40.6643,MERCHANT4,1.0  
+CARD000000002,200.0,10000000012,-73.9385,40.6643,MERCHANT0,0.0  
+```  
+  
+the result is the following:  
+  
+```text  
+200.0,MERCHANT0,0.0,5765.0,1.0,0.0,0.0  
+200.0,MERCHANT1,0.0,5765.0,1.0,0.0,0.0  
+200.0,MERCHANT3,0.0,0.0,1.0,0.5,1.0  
+200.0,MERCHANT3,0.0,5765.0,4.0,0.3333333432674408,0.0  
+200.0,MERCHANT3,0.0,5765.0,1.0,0.5,1.0  
+200.0,MERCHANT0,0.0,0.0,0.0,0.0,0.0  
+200.0,MERCHANT0,0.0,5765.0,4.0,0.0,0.0  
+200.0,MERCHANT1,0.0,5765.0,1.0,0.0,0.0  
+200.0,MERCHANT3,0.0,0.0,1.0,0.6000000238418579,1.0  
+200.0,MERCHANT3,0.0,5765.0,5.0,0.5,0.0  
+200.0,MERCHANT4,0.0,5765.0,1.0,1.0,1.0  
+```  
+  
+## Mini-batching the output  
+  
+If you need that your output has more than a single event, you can use the aggregator.entries property. For example if this value is fixed to 5 the output will be:  
+  
+```  
+CARD000000000,200.0,MERCHANT0,0.0,5765.0,-8.0,CARD000000000,200.0,MERCHANT3,0.0,0.0,1.0,CARD000000000,200.0,MERCHANT1,0.0,5765.0,1.0,CARD000000000,200.0,MERCHANT0,0.0,5765.0,4.0,CARD000000000,200.0,MERCHANT3,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0  
 ```
 
-# Starting the stream in training mode
+## Running Mode
 
-The stream can be started in both modes: training mode and running mode. Because sequence handler is considered to be used in an ETL phase in a **Machine Learning** process, the neuronal network waits for events with a **label** field. This label is created with the function with the same name and it **must be present** in scope as implicit evidence. The stream uses this function to "label" each event. Also a **sortBy** is mandatory because the stream supports reading event batches and these should be ordered by some timestamp to prevent an hypothetical disorder. Note that events should be **correctly in time ordered**.
+This mode expects an operation id as first field. For example:
+```scala
+ID1,CARD000000000,200.0,10000000001,-3.70325,40.4167,MERCHANT0
+```
+gives an output like:
 
 ```scala
-
-object TrainOneSeq extends App {
-
-  import implicits._
-
-  import sq5._
-
-  (sh5) onComplete {
-    case Success(handler) => {
-      // function to create the label
-      implicit def label(_new: Transaction): String = _new.label.get.toString
-      // function to sort input events
-      implicit def sortBy(_new: Transaction): Double = _new.timestamp
-      println("Starting in training mode")
-      // The Double parameter represents the result of the sortBy function
-      SequenceHandlerStreamTrainer[Transaction, Double](handler :: Nil)
-    }
-    case _ => System.exit(-1)
-  }
-}
-
+ID1,CARD000000000,200.0,MERCHANT0,0.0,0.0,0.0
 ```
 
-Once the stream is created it reads from the **Stdin**. For example if the incoming events are:
-
-9992929,1000,1000,0.4456,0.2333,200,1.0<br/>
-9992929,1001,1001,0.4456,0.2333,200,1.0<br/>
-9992929,1001,1001,0.4456,0.2333,200,0.0<br/>
-
-in our example the output would be:
-
-1000.0,200,0.0,0.0,0.0,1.0<br/>
-1001.0,200,1.0,0.0,1.0,1.0<br/>
-1001.0,200,0.0,0.0,0.0,0.0<br/>
-
-
-# Starting the stream in running mode
-
-This mode differs from the training mode in two aspects. First, it waits for a operation ID as first field, and there is no need in any label field. Second, the label field is supposed to be the last of the event (although the label function can get any field) and events should not include it. That´s because the "label" field in the type is marked as optional.
+The following code starts the stream in the running mode:
 
 ```scala
-object RunOneSeq extends App {
-
-  import implicits._
-
-  import sq5._
-
-  (sh5) onComplete {
-    case Success(handler) => {
-      println("Running in run mode")
-      SequenceHandlerStreamRunner(handler :: Nil)
-    }
-    case _ => System.exit(-1)
-  }
+sh onComplete {  
+  case Success(handler) =>  
+    SequenceHandlerStreamRunner(handler :: Nil, Sources.stdinSource)  
 }
 ```
 
-So once the model is trained. The running mode waits something like that:
+This code does not need a **label** function it just applies the function and outputs the transformed event with the ID. 
 
-OpId,9992929,1000,1000,0.4456,0.2333,200
-
-and prints
-
-OpId,1000.0,200,-1.0,0.0,-1.0
-
-Therefore the same implementation works for both modes. The OpId field enters and is forwarded without any modification. It should be used to identified the input event.
-
-# Configuration
-
-```scala
-# Simple configuration (by URI)
-mongodb.uri = "localhost:27017"
-mongodb.uri = ${?MONGO_URI}
-
-mongodb.db = "fraud"
-mongodb.db = ${?MONGO_DB}
-
-logger.reactivemongo=WARN
-
-akka {
-  loglevel = "DEBUG"
-  loggers = ["akka.event.slf4j.Slf4jLogger"]
-  logging-filter = "akka.event.slf4j.Slf4jLoggingFilter"
-}
-
-aggregator {
-  entries = 1
-  entries = ${?WINDOW_SIZE}
-
-  groupedBy = 1
-  groupedBy = ${?AGGREGATOR_GROUPEDBY}
-
-  milliseconds = 1
-  milliseconds = ${?MILLISECONDS}
-}
-```
-
-The **entries** parameter allows to print series of events. For example, if this field is set with 2 the output would be:
-
-Input: 9992929,1000,1000,0.4456,0.2333,200,1.0<br/>
-output: 1000.0,200,0.0,0.0,0.0,1000.0,200,0.0,0.0,0.0,1.0<br/>
-
-For a value of 5
-
-1000.0,200,0.0,0.0,0.0,1000.0,200,0.0,0.0,0.0,1000.0,200,0.0,0.0,0.0,1000.0,200,0.0,0.0,0.0,1000.0,200,0.0,0.0,0.0,1.0
-
-an so on...
-
-The **groupedBy** and **milliseconds** indicates the way of the stream consumes. The first is the number of the events the consumer reads, I mean, is the batch size. The second represents the time the stream waits to push downstream. If the **groupedBy** is greater than 1 the stream groups the events with the field **id** of the model and creates many batches as **unique values of the id** field exists.
-
-# Multiple sequences
-
-If you want to create more than one sequence at the same time. The stream can be started with more sequence handler objects:
-
-```scala
-object TrainTwoSeq extends App {
-
-  import implicits._
-
-  import sq1._
-  import sq2._
-
-  (sh1 zip sh2) onComplete {
-    case Success(handler) => {
-      implicit def label(_new: Experiment1): String = _new.label.get.toString
-      implicit def sortBy(_new: Experiment1): Double = _new.timestamp
-      println("Running in run train mode")
-      SequenceHandlerStreamTrainer[Experiment1, Double](
-        handler._1 :: handler._2 :: Nil)
-    }
-    case _ => System.exit(-1)
-  }
-}
-
-```
-
-**IMPORTANT**
-
-If you deal with parallel sequences the **groupedBy** should be 1 to avoid conflicts in the repo.
-Any change regarding the datatypes or WINDOW_SIZE should applied to a different model name otherwise errors could happen in the sequence process.
-
-**Creating your project**
-
-Create a new **SBT** project with a build.sbt file:
-
-```scala
-name := "myexperiment"
-
-version := "1.0"
-
-scalaVersion := "2.12.2"
-
-resolvers ++=
-  Seq("Artifactory Sequence Handler" at "http://artifactory.default.svc.cluster.local:8081/artifactory/ml/sequence-handler-core/releases",
-      "Artifactory Derived Codecs" at "http://artifactory.default.svc.cluster.local:8081/artifactory/ml/reactive-mongo-derived/snapshots")
-
-libraryDependencies ++= Seq("com.bbvalabs" %% "sequence-handler-core" % "0.3.0")
-```
+**Pacarana** is an open source for processing data based on Akka Stream. It can be adapted to use different **Akka** projects like **Alpakka** for data ingestion. It´s single node process, and for massive data transformation **Spark UDAFS** can be more suitable. 

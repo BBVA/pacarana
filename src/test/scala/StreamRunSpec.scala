@@ -2,7 +2,7 @@ package com.bbva.pacarana.tests
 
 import akka.actor.Props
 import akka.stream.scaladsl.Source
-import com.bbva.pacarana.implicits.Implicits
+import com.bbva.pacarana.Implicits
 import com.bbva.pacarana.repository.Repository
 import com.bbva.pacarana.runtime.{SequenceHandler, SinkActorRunner, StreamRunner, TaskSupervisor}
 import com.bbva.pacarana.settings.Settings
@@ -28,7 +28,7 @@ class StreamRunnerSpec
   }
 
   import impls._
-  import com.bbva.pacarana.implicits.Implicits._
+  import com.bbva.pacarana.Implicits._
 
   def createSequenceHandler(
                              settings: Settings): (SequenceHandler[ExampleModel, ExampleDelta],

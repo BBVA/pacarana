@@ -3,7 +3,7 @@ package com.bbva.pacarana.tests
 import akka.actor.{ActorSystem, Props}
 import akka.util.Timeout
 import akka.pattern.ask
-import com.bbva.pacarana.implicits.Implicits
+import com.bbva.pacarana.Implicits
 import com.bbva.pacarana.repository.Repository
 import com.bbva.pacarana.runtime._
 import com.bbva.pacarana.settings.Settings
@@ -26,7 +26,7 @@ class SinkActorSpec
 
     import impls._
 
-    import com.bbva.pacarana.implicits.Implicits._
+    import com.bbva.pacarana.Implicits._
     implicit val _settings = settings
 
     implicit def append(_new: ExampleModel,

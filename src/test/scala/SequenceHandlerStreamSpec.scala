@@ -6,7 +6,7 @@ import org.scalatest.{Matchers, WordSpecLike}
 import shapeless.lens
 
 import scalaz.effect.IO
-import com.bbva.pacarana.implicits.Implicits._
+import com.bbva.pacarana.Implicits._
 import com.bbva.pacarana.runtime.{SequenceHandlerStreamRunner, SequenceHandlerStreamTrainer, TaskSupervisor}
 import impls._
 

@@ -4,7 +4,6 @@ import akka.actor.{Actor, ActorLogging, ActorRef}
 import akka.event.LoggingAdapter
 import com.bbva.pacarana.model.Model
 import com.bbva.pacarana.model.SequencerTypes.{DataForRun, DataForTrain}
-import com.bbva.pacarana.runtime.{AckBox, SequenceHandler}
 import com.bbva.pacarana.settings.Settings
 
 import scalaz.effect.IO
@@ -75,6 +74,7 @@ final class SinkActor[A <: Model](
       origin = Some(sender())
       val e2 = list.map(_._2.size).sum
 
+      // TODO: This code should be more expressive
       val totalTask = e2
       val result = list foreach {
         case (ngrps, list) =>
@@ -90,6 +90,7 @@ final class SinkActor[A <: Model](
                     case ((n, l), f) :: t =>
                       log.debug(s"n tasks: ${n}")
                       log.debug(s"total tasks ${totalTask}")
+
                       if (!l.isEmpty) {
                         log.debug(s"L size ${l.size}")
                         l.foreach { l1 =>
@@ -100,9 +101,7 @@ final class SinkActor[A <: Model](
                             val masterModel = l1.head.model
                             val strTail = t.map {
                               case ((i, e), f2) => {
-                                //if (e.size == settings.entries) {
                                   e.map(r => f2(r.right))
-                                //} else List()
                               }
                             }
 

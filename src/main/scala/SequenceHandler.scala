@@ -5,7 +5,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.scaladsl.Source
 import akka.stream.ActorMaterializer
 
-import com.bbva.pacarana.implicits.Implicits
+import com.bbva.pacarana.Implicits
 import com.bbva.pacarana.model._
 import com.bbva.pacarana.parser.CSVConverter
 import com.bbva.pacarana.repository.Repository
