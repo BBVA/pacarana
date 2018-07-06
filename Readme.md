@@ -6,8 +6,18 @@ It´s based on an Akka Stream and offers a built in **Source Stage** to read fro
   
 At the moment it only accepts **comma delimited CSV** input files, and requires MongoDB.  Events in **Pacarana** must enter ordered in time.
   
+##Starting
+
+Build the artifact using **SBT** and import in your project as dependence.
+
+``
+sbt 'set test in assembly := {}' assembly``
+
+Examples are included. For a quick start execute run **MongoDB** using **Docker**:
+
+``docker run -p 27017:27017 mongo``
   
-# Application Example  
+## Application Example  
   
 To show how it works, we start from a CSV dataset with some labeled fraudulent or not fraudulent card operations:  
 ```text  

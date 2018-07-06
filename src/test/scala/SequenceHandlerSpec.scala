@@ -1,3 +1,16 @@
+/*
+   Copyright 2018 Banco Bilbao Vizcaya Argentaria, S.A.
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+       http://www.apache.org/licenses/LICENSE-2.0
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package com.bbva.pacarana.tests
 
 import akka.actor.ActorSystem
@@ -7,15 +20,12 @@ import com.bbva.pacarana.repository.Repository
 import com.bbva.pacarana.runtime.SequenceHandler
 import com.bbva.pacarana.settings.Settings
 
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import reactivemongo.bson.{BSONDocumentHandler, derived}
 import shapeless.{Lens, lens}
 
 import scala.concurrent.duration._
 import scala.concurrent.Await
-import scalaz.effect.IO
 
 case class ExampleModel(id: String, id2: String, field1: Int, field2: Int, label: Int)
     extends Model
@@ -44,7 +54,6 @@ object impls {
     s"${_new._1.field1},${_new._1.field2},${_new._2.delta}"
 }
 
-@RunWith(classOf[JUnitRunner])
 class SequenceHandlerSpec
     extends FlatSpec
     with Matchers {

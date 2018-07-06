@@ -1,3 +1,16 @@
+/*
+   Copyright 2018 Banco Bilbao Vizcaya Argentaria, S.A.
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+       http://www.apache.org/licenses/LICENSE-2.0
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package com.bbva.pacarana.examples.readmesample
 
 import com.bbva.pacarana.Implicits.SimpleAppend
@@ -178,16 +191,15 @@ object InitStream extends App {
 
   implicit def sortBy(_new: Transaction): Long = _new.timestamp
 
-  /*sh zip sh1 onComplete {
+  sh zip sh1 onComplete {
       case Success((handler, handler1)) => {
         SequenceHandlerStreamTrainer[Transaction, Long](handler :: handler1 :: Nil, Sources.stdinSource, label _)
       }
       case _ => System.exit(-1)
-  }*/
+  }
 
-
-  sh onComplete {
+  /*sh onComplete {
     case Success(handler) =>
       SequenceHandlerStreamRunner(handler :: Nil, Sources.stdinSource)
-  }
+  }*/
 }
