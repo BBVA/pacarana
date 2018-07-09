@@ -21,7 +21,9 @@ import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
 import akka.util.Timeout
 import akka.actor.{ActorRef, ActorSystem}
 import com.bbva.pacarana.model.Model
-import com.bbva.pacarana.parser.CSVConverter
+
+import shapeless.examples.CSVConverter
+
 import com.bbva.pacarana.settings.Settings
 
 import scala.concurrent.Future

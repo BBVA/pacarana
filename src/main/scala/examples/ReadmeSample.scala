@@ -16,7 +16,6 @@ package com.bbva.pacarana.examples.readmesample
 import com.bbva.pacarana.Implicits.SimpleAppend
 import com.bbva.pacarana.Sources
 import com.bbva.pacarana.model.{DeltaType, Model}
-import com.bbva.pacarana.parser.CSVConverter
 import com.bbva.pacarana.runtime.{SequenceHandler, SequenceHandlerStreamRunner, SequenceHandlerStreamTrainer}
 import com.bbva.pacarana.settings.Settings
 import reactivemongo.bson.{BSONDocumentHandler, derived}
@@ -25,6 +24,7 @@ import scala.concurrent.Future
 import scala.util.Success
 import scalaz.effect.IO
 import com.bbva.pacarana.Implicits._
+import shapeless.examples.CSVConverter
 
 case class Transaction(id: String,
                        amount: Double,

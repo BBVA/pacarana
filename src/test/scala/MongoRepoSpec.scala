@@ -14,7 +14,6 @@
 package com.bbva.pacarana.tests
 
 import com.bbva.pacarana.model._
-import com.bbva.pacarana.parser.CSVConverter
 import com.bbva.pacarana.repository.Repository
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, WordSpecLike}
 import shapeless._
@@ -24,8 +23,8 @@ import reactivemongo.bson.{BSONDocumentHandler, derived}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scalaz.concurrent.Task
-
 import com.bbva.pacarana.Implicits._
+import shapeless.examples.CSVConverter
 
 class MongoRepoSpec
     extends FlatSpec

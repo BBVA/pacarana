@@ -15,13 +15,12 @@ package com.bbva.pacarana.tests
 
 import akka.actor.ActorSystem
 import com.bbva.pacarana.model.{AnySequence, DeltaModel2, DeltaType, Model}
-import com.bbva.pacarana.parser.CSVConverter
 import com.bbva.pacarana.repository.Repository
 import com.bbva.pacarana.runtime.SequenceHandler
 import com.bbva.pacarana.settings.Settings
-
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import reactivemongo.bson.{BSONDocumentHandler, derived}
+import shapeless.examples.CSVConverter
 import shapeless.{Lens, lens}
 
 import scala.concurrent.duration._

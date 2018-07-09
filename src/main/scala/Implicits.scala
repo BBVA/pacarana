@@ -19,12 +19,13 @@ import akka.stream.scaladsl.Source
 import akka.stream.{ActorMaterializer, Graph, SourceShape}
 import com.bbva.pacarana.model.SequencerTypes.{DataForRun, DataForTrain}
 import com.bbva.pacarana.model._
-import com.bbva.pacarana.parser.CSVConverter
 import com.bbva.pacarana.repository.Repository
 import com.bbva.pacarana.runtime.{InputMsgs, InputMsgsRunner}
 import com.bbva.pacarana.runtime.StreamOps.StdinSourceStage
 import com.bbva.pacarana.settings.Settings
 import reactivemongo.bson.{BSONDocumentHandler, derived}
+
+import shapeless.examples.CSVConverter
 
 import scala.concurrent.ExecutionContext
 import scalaz.effect.IO

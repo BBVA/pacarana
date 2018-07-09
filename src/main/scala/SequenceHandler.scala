@@ -17,14 +17,13 @@ import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.scaladsl.Source
 import akka.stream.ActorMaterializer
-
 import com.bbva.pacarana.Implicits
 import com.bbva.pacarana.model._
-import com.bbva.pacarana.parser.CSVConverter
 import com.bbva.pacarana.repository.Repository
 import com.bbva.pacarana.settings.Settings
-
 import reactivemongo.api.collections.bson.BSONCollection
+import shapeless.examples.CSVConverter
+
 import scalaz.{Monoid, \/, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scalaz.concurrent.Task

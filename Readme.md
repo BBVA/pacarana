@@ -1,10 +1,10 @@
 # PACARANA  
   
-**Pacarana** was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might provide aditional features for training processes. For example, in a bank operations dataset we could obtain new features like time interval between operations for each card or the exponential moving average of one company´s price in the stock market.  
+**Pacarana** was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might provide aditional features for the training processes. For example, in a bank operations dataset we could obtain new features like time interval between operations for each card or the exponential moving average of one company´s price in the stock market.  
   
-It´s based on an Akka Stream and offers a built in **Source Stage** to read from the standard input and print to the standart output stream, although it´s configurable with the Scalaz Effect IO.   
+It´s based on **Akka Stream** and offers a built in **Source Stage** to read from the standard input and print the output using the Scalaz Effect IO.   
   
-At the moment it only accepts **comma delimited CSV** input files, and requires MongoDB.  Events in **Pacarana** must enter ordered in time.
+At the moment it only accepts **comma delimited CSV** input files, and requires MongoDB.  Events in **Pacarana** **must** enter sequentially ordered.
   
 ##Starting
 
@@ -13,7 +13,7 @@ Build the artifact using **SBT** and import in your project as dependence.
 ``
 sbt 'set test in assembly := {}' assembly``
 
-Examples are included. For a quick start execute run **MongoDB** using **Docker**:
+Examples are included. For a quick start execute run **MongoDB** using **Docker** an run the examples from the **src/main/scala/examples**:
 
 ``docker run -p 27017:27017 mongo``
   
@@ -43,7 +43,7 @@ case class Transaction(id: String, amount: Double, timestamp: Long, long: Double
 case class TemporalFeaturesByCard(amountDiff: Double, timeBetweenOp: Double, diffPos: Double) extends DeltaType  
 ```
   
-The main sequences are created by the *id* member. In this case, the **id** must be in the first place which corresponds to the card id.   
+The main sequences are created by the *id* member. In this case, the **id** must be in the first place which corresponds to the card id. Note that the **label** field is declared as an **Option**. The CSV parser will ignore this field in running mode.   
   
 2. **Pacarana** uses **type class derivation from shapeless** for the CSV parser and for the **MongoDB codecs** so you need to declare three implicits in scope:
   
@@ -184,7 +184,7 @@ in our example the output configured by the **output** function will be:
   
 ## Building another Sequence Handler  
   
-**Pacarana** allows to add another sequence handler that will process in parallel the incoming events for a different field. In this example we sequence by the merchantid to obtain what is the fraud average in the last n transactions. Just configure another sequence handler:  
+**Pacarana** allows to add another sequence handler that will process in parallel the incoming events for a different field. In this example we sequence by the **merchantid** to obtain what is the fraud average in the last n transactions. Just configure another sequence handler:  
   
 ```scala  
   
@@ -324,4 +324,24 @@ sh onComplete {
 
 This code does not need a **label** function it just applies the function and outputs the transformed event with the ID. 
 
-**Pacarana** is an open source for processing data based on Akka Stream. It can be adapted to use different **Akka** projects like **Alpakka** for data ingestion. It´s single node process, and for massive data transformation **Spark UDAFS** can be more suitable. 
+##Configuration Notes  
+
+The application.conf includes how to configure the **MongoDB connection** and how the stream ingests data:
+
+```text
+aggregator {
+  # How many events store for eac sequence. It is useful mini-batching the outpue
+  entries = 1
+
+  # How many elements reads at time
+  groupedBy = 1
+
+  # How much time to wait to push down stream
+  milliseconds = 1
+}
+```
+
+Check the Akka [groupedWithin](https://doc.akka.io/docs/akka/current/stream/operators/Source-or-Flow/groupedWithin.html#groupedwithin) documentation to see how it works more in detail.
+
+
+

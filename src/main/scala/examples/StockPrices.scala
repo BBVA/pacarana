@@ -17,11 +17,10 @@ import java.util.Date
 
 import com.bbva.pacarana.Sources
 import com.bbva.pacarana.model.{DeltaType, Model}
-import com.bbva.pacarana.parser.CSVConverter
 import com.bbva.pacarana.runtime.{SequenceHandler, SequenceHandlerStreamRunner, SequenceHandlerStreamTrainer}
 import com.bbva.pacarana.settings.Settings
-
 import reactivemongo.bson.{BSONDocumentHandler, derived}
+import shapeless.examples.CSVConverter
 
 import scala.concurrent.{Await, Future}
 import scalaz.effect.IO
