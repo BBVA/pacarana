@@ -1,12 +1,11 @@
 # PACARANA  
   
-**Pacarana** was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might provide aditional features for the training processes. For example, in a bank operations dataset we could obtain new features like time interval between operations for each card or the exponential moving average of one company´s price in the stock market.  
-  
-It´s based on **Akka Stream** and offers a built in **Source Stage** to read from the standard input and print the output using the Scalaz Effect IO.   
+**Pacarana** was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might give additional features for the training processes. For example, in a bank operations dataset we could get new features like time interval between operations for each card or the exponential moving average of one company´s price in the stock market.
+It´s based on **Akka Stream** and offers a built-in **Source Stage** to read from the standard input and print the output using the Scalaz Effect IO.   
   
 At the moment it only accepts **comma delimited CSV** input files, and requires MongoDB.  Events in **Pacarana** **must** enter sequentially ordered.
   
-##Starting
+## Starting
 
 Build the artifact using **SBT** and import in your project as dependence.
 
@@ -145,7 +144,7 @@ Because this software was created thinking in machine learning projects some of 
 Before the stream starts, it is needed to define additional properties for it:  
   
  * Your **label** function which takes one field of your model and put it at the output's end.   
- * The **sortBy** function wich indicates what field from the Model is used to short the incoming events. It is necessary if you configure your **groupedBy** property > 1 to avoid a possible event disorder.  
+ * The **sortBy** function wich indicates what field from the **Model** is used to short the incoming events. It is necessary if you configure your **groupedBy** property > 1 to avoid a possible event disorder.  
  * The parameters needed for starting the stream are the **handlers** list(in this case only one), the **built in stdinSource** available, and the **label** function.   
   
 The two parameter types correspond to the **Transaction** and the field type from which the **order** is performed, in this case the field timestamp type, a Long .  
