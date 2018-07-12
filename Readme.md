@@ -55,9 +55,10 @@ import com.bbva.pacarana.Implicits._
 object Codecs {  
  implicit val modelparser = CSVConverter[Transaction]
  implicit val modeltomongo : BSONDocumentHandler[Transaction] = derived.codec[Transaction]
- implicit val deltatomongo : BSONDocumentHandler[TemporalFeaturesByCard] = derived.codec[TemporalFeaturesByCard]}  
+ implicit val deltatomongo : BSONDocumentHandler[TemporalFeaturesByCard] = derived.codec[TemporalFeaturesByCard]
+ }  
 ```  
-  
+ 
 3. Declare a **Sequence Handler**. To make the things easier it several traits you can extend from to implements the required functions: SimpleDelta, Aggregate, SimpleAppend, SimpleAppendWithSerie. In this example we will use **SimpleAppend** and **Output** traits: 
 ```scala  
 object SequenceHandlerFunctions  
@@ -98,7 +99,7 @@ object SequenceHandlerFunctions
       case ((newModel, newDelta), (lastModel, lastDelta)) => {  
         (newModel, {  
           // Calculate the new dynamic data  
-  val newPosition   = (newModel.long, newModel.lat)  
+          val newPosition   = (newModel.long, newModel.lat)  
           val lastPosition  = (lastModel.long, lastModel.lat)  
           val diffAmount    = newModel.amount - lastModel.amount  
           val diffTimestamp = newModel.timestamp - lastModel.timestamp  
@@ -127,7 +128,8 @@ object SequenceHandlerConf {
  implicit val _lens = lens[Transaction] >> 'id  
  // Mongo collection to store the collection implicit val model : String = "sq"  
  // Init delta value implicit val initDelta = TemporalFeaturesByCard(0,0,0)  
- implicit def io: String => IO[Unit] = str => IO { println(str) }   implicit val settings = new Settings  
+ implicit def io: String => IO[Unit] = str => IO { println(str) }
+ implicit val settings = new Settings  
 }  
 ```  
   
@@ -155,8 +157,14 @@ The SequenceHandler constructor returns a Scala Future which completes once it i
 object InitStream extends App {  
  import SequenceHandlerConf._ import SequenceHandlerDefinition._ def label(_new: Transaction): String = _new.label.get.toString   implicit def sortBy(_new: Transaction): Double = _new.timestamp  
   
- sh onComplete { case Success(handler) => { SequenceHandlerStreamTrainer[Transaction, Long](handler :: Nil, Sources.stdinSource, label _)  
- } case _ => System.exit(-1) }}  
+ sh onComplete { 
+    case Success(handler) => {
+       SequenceHandlerStreamTrainer[Transaction, Long](handler :: Nil, Sources.stdinSource, label _)  
+    }
+    
+    case _ => System.exit(-1) 
+   }
+ }  
 ```  
    
 Once the stream is created it reads from the **Stdin**. For example if the incoming events are:  
