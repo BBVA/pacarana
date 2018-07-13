@@ -1,7 +1,7 @@
 # PACARANA  
   
 **Pacarana** was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might give additional features for the training processes. For example, in a bank operations dataset we could get new features like time interval between operations for each card or the exponential moving average of one company´s price in the stock market.
-It´s based on **Akka Stream** and offers a built-in **Source Stage** to read from the standard input and print the output using the Scalaz Effect IO.   
+It´s based on **Akka Stream** and offers a built-in **Akka Source Stage** to read from the standard input and print the output using the **Scalaz IO**.
   
 At the moment it only accepts **comma delimited CSV** input files, and requires MongoDB.  Events in **Pacarana** **must** enter sequentially ordered.
   
@@ -155,7 +155,12 @@ The SequenceHandler constructor returns a Scala Future which completes once it i
  
 ```scala  
 object InitStream extends App {  
- import SequenceHandlerConf._ import SequenceHandlerDefinition._ def label(_new: Transaction): String = _new.label.get.toString   implicit def sortBy(_new: Transaction): Double = _new.timestamp  
+ import SequenceHandlerConf._
+ import SequenceHandlerDefinition._
+ 
+ def label(_new: Transaction): String = _new.label.get.toString
+   
+ implicit def sortBy(_new: Transaction): Double = _new.timestamp  
   
  sh onComplete { 
     case Success(handler) => {
@@ -262,11 +267,10 @@ object  InitStream extends App {
   implicit def sortBy(_new: Transaction): Long = _new.timestamp  
   
   sh zip sh1 onComplete {  
-  
-  case Success((handler, handler1)) => {  
-     SequenceHandlerStreamTrainer[Transaction, Long](handler :: handler1 :: Nil, Sources.stdinSource, label _) }
-  case _ => System.exit(-1)  
- }  
+     case Success((handler, handler1)) => {  
+        SequenceHandlerStreamTrainer[Transaction, Long](handler :: handler1 :: Nil, Sources.stdinSource, label _) }
+     case _ => System.exit(-1)  
+  }  
 }
 ```  
   
@@ -331,7 +335,7 @@ sh onComplete {
 
 This code does not need a **label** function it just applies the function and outputs the transformed event with the ID. 
 
-##Configuration Notes  
+## Configuration Notes  
 
 The application.conf includes how to configure the **MongoDB connection** and how the stream ingests data:
 
