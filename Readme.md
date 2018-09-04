@@ -1,9 +1,9 @@
 # PACARANA  
   
-**Pacarana** was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that might give additional features for the training processes. For example, in a bank operations dataset we could get new features like time interval between operations for each card or the exponential moving average of one company´s price in the stock market.
+**Pacarana** was created because of the need of extracting more information from datasets to create more powerful ones for our machine learning projects. Due the sequential nature of the data, we tried to build a stand alone software that gives additional features for the training processes. For example, in a bank operations dataset we could get new features like time interval between operations for each card or the exponential moving average of one company´s value in the stock market.
 It´s based on **Akka Stream** and offers a built-in **Akka Source Stage** to read from the standard input and print the output using the **Scalaz IO**.
   
-At the moment it only accepts **comma delimited CSV** input files, and requires MongoDB.  Events in **Pacarana** **must** enter sequentially ordered.
+At the moment it only accepts **comma delimited CSV** input files, and requires MongoDB.  Events that get in **Pacarana** **must** enter sequentially ordered by some field.
   
 ## Starting
 
@@ -44,7 +44,7 @@ case class TemporalFeaturesByCard(amountDiff: Double, timeBetweenOp: Double, dif
   
 The main sequences are created by the *id* member. In this case, the **id** must be in the first place which corresponds to the card id. Note that the **label** field is declared as an **Option**. The CSV parser will ignore this field in running mode.   
   
-2. **Pacarana** uses **type class derivation from shapeless** for the CSV parser and for the **MongoDB codecs** so you need to declare three implicits in scope:
+2. **Pacarana** uses **type class derivation from shapeless** for the **CSV parser** and for the **MongoDB codecs** so you need to declare three implicits in scope:
   
 ```scala  
 // You must import this  
@@ -59,10 +59,9 @@ object Codecs {
  }  
 ```  
  
-3. Declare a **Sequence Handler**. To make the things easier it several traits you can extend from to implements the required functions: SimpleDelta, Aggregate, SimpleAppend, SimpleAppendWithSerie. In this example we will use **SimpleAppend** and **Output** traits: 
+3. Declare a **Sequence Handler**. To make the things easier there are several traits you can extend from to implement the required functions: **SimpleDelta, Aggregate, SimpleAppend, SimpleAppendWithSerie**. In this example we will use **SimpleAppend** and **Output** traits: 
 ```scala  
-object SequenceHandlerFunctions  
-    extends SimpleAppend[Transaction, TemporalFeaturesByCard] with Output[Transaction, TemporalFeaturesByCard] {  
+object SequenceHandlerFunctions extends SimpleAppend[Transaction, TemporalFeaturesByCard] with Output[Transaction, TemporalFeaturesByCard] {  
   
   import math._  
   
@@ -105,11 +104,12 @@ object SequenceHandlerFunctions
           val diffTimestamp = newModel.timestamp - lastModel.timestamp  
           val diffLocation  = newPosition - lastPosition  
           // Return a new object with the these new fields to be sent to the output stream  
-  TemporalFeaturesByCard(diffAmount, diffTimestamp, diffLocation)  
+          TemporalFeaturesByCard(diffAmount, diffTimestamp, diffLocation)  
         })  
       }  
     }  
   
+  /** This is your sequence handler output **/
   override def output(_new: (Transaction, TemporalFeaturesByCard)): String =  
     s"${_new._1.id},${_new._1.amount},${_new._1.center},${_new._2.amountDiff},${_new._2.diffPos},${_new._2.timeBetweenOp}"  
 }  
